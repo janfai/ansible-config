@@ -1,0 +1,52 @@
+---
+# Hlavní playbook pro ansible-pull
+
+- name: Základní konfigurace pro všechny systémy
+  hosts: localhost
+  connection: local
+  become: yes
+  
+  pre_tasks:
+    - name: Získat fakta o systému
+      setup:
+        gather_subset:
+          - 'all'
+      tags: always
+      
+    - name: Detekce typu systému
+      set_fact:
+        system_type: >-
+          {% if ansible_distribution == 'Linux Mint' %}mint_workstation
+          {% elif ansible_distribution == 'Debian' and ansible_virtualization_role != 'host' %}debian_workstation
+          {% else %}server{% endif %}
+      tags: always
+      
+    - name: Zobrazit informace o systému
+      debug:
+        msg: "Konfiguruji {{ ansible_distribution }} {{ ansible_distribution_release }} jako {{ system_type }}"
+      tags: always
+  
+  roles:
+    - role: base
+      tags: base
+      
+    # Podmíněné role podle typu systému
+    - role: workstation/mint
+      when: system_type == 'mint_workstation'
+      tags: workstation
+      
+    - role: workstation/debian
+      when: system_type == 'debian_workstation'
+      tags: workstation
+      
+    - role: server
+      when: system_type == 'server'
+      tags: server
+      
+  tasks:
+    - name: Zaznamenat úspěšnou konfiguraci
+      lineinfile:
+        path: /var/log/ansible-config-status.log
+        line: "{{ ansible_date_time.iso8601 }} - Konfigurace úspěšně aplikována"
+        create: yes
+      tags: always
