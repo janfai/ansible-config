@@ -1,0 +1,39 @@
+---
+# Základní konfigurace pro všechny systémy
+
+- name: Aktualizovat cache balíčků
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+  become: yes
+
+- name: Nastavit české repozitáře
+  template:
+    src: sources.list.j2
+    dest: /etc/apt/sources.list
+  become: yes
+  notify: aktualizovat apt cache
+
+- name: Nastavit locale
+  include_tasks: locale.yml
+
+- name: Nastavit timezone
+  copy:
+    content: "Europe/Prague\n"
+    dest: /etc/timezone
+  become: yes
+  notify: aktualizovat timezone
+
+- name: Instalovat základní balíčky
+  apt:
+    name:
+      - sudo
+      - vim
+      - curl
+      - wget
+      - htop
+      - ntp
+      - logrotate
+      - fail2ban
+    state: present
+  become: yes

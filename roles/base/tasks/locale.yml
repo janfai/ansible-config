@@ -1,0 +1,22 @@
+---
+# Nastavení lokalizace
+
+- name: Zajistit, že balíček locales je nainstalován
+  apt:
+    name: locales
+    state: present
+  become: yes
+
+- name: Konfigurace locale.gen
+  template:
+    src: locale.gen.j2
+    dest: /etc/locale.gen
+  become: yes
+  notify: generovat locales
+
+- name: Konfigurace default/locale
+  template:
+    src: locale.j2
+    dest: /etc/default/locale
+  become: yes
+  notify: generovat locales

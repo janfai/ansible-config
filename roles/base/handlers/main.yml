@@ -1,0 +1,15 @@
+---
+# Handlery pro základní roli
+
+- name: aktualizovat apt cache
+  apt:
+    update_cache: yes
+  become: yes
+
+- name: aktualizovat timezone
+  command: dpkg-reconfigure -f noninteractive tzdata
+  become: yes
+
+- name: generovat locales
+  command: locale-gen
+  become: yes
