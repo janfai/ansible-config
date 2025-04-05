@@ -1,33 +1,52 @@
 ---
+# roles/postfix/tasks/main.yml
+
 - name: Instalace Postfixu a závislostí
   apt:
     name:
       - postfix
       - mailutils
+      - libsasl2-modules
     state: present
+  tags: postfix
 
-- name: Vytvořit sasl_passwd soubor pro Postfix
+- name: Vytvořit adresář pro SASL konfiguraci
+  file:
+    path: /etc/postfix/sasl/
+    state: directory
+    mode: 0755
+  tags: postfix
+
+- name: Vytvořit sasl_passwd soubor
   template:
     src: sasl_passwd.j2
-    dest: /etc/postfix/sasl_passwd
+    dest: /etc/postfix/sasl/sasl_passwd
     owner: root
     group: root
-    mode: '0600'
+    mode: 0600
   notify: restart postfix
+  tags: postfix
 
-- name: Vytvořit databázi sasl_passwd.db
-  command: postmap /etc/postfix/sasl_passwd
+- name: Vytvořit hashovanou databázi
+  command: postmap /etc/postfix/sasl/sasl_passwd
   notify: restart postfix
+  tags: postfix
 
-- name: Konfigurace Postfixu
+- name: Konfigurace main.cf
   template:
     src: main.cf.j2
     dest: /etc/postfix/main.cf
+    validate: postfix check %s
   notify: restart postfix
+  tags: postfix
 
-- name: Restartovat Postfix po změně konfigurace
-  service:
-    name: postfix
-    state: restarted
+- name: Zajistit správná oprávnění pro konfiguraci
+  file:
+    path: /etc/postfix/
+    recurse: yes
+    owner: root
+    group: postfix
+    mode: 0750
+  tags: postfix
 
 - include_tasks: send_notification.yml

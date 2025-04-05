@@ -4,17 +4,16 @@ biff = no
 append_dot_mydomain = no
 readme_directory = no
 
-# Základní konfigurace
-myhostname = {{ ansible_hostname }}
-myorigin = {{ ansible_domain }}
-mydestination = {{ ansible_hostname }}, localhost
-relayhost = [{{ postfix_relay_host }}]:587
+# Základní konfigurace Postfixu
+myhostname = {{ ansible_hostname }}.{{ domain }}
+mydomain = {{ domain }}
+myorigin = $mydomain
 inet_interfaces = loopback-only
 inet_protocols = ipv4
 
-# SASL konfigurace pro relay
+# Relay konfigurace
+relayhost = [{{ postfix_relay_host }}]:{{ postfix_relay_port }}
+smtp_use_tls = yes
 smtp_sasl_auth_enable = yes
 smtp_sasl_password_maps = hash:/etc/postfix/sasl_passwd
 smtp_sasl_security_options = noanonymous
-smtp_tls_CAfile = /etc/ssl/certs/ca-certificates.crt
-smtp_use_tls = yes
