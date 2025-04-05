@@ -1,0 +1,10 @@
+{# roles/repo_manager/templates/sources.list.j2 #}
+# Automaticky generováno Ansible
+{{ repo_config.main }}
+{{ repo_config.security }}
+{% if repo_config.updates is defined %}
+{{ repo_config.updates }}
+{% endif %}
+{% if repo_config.mint is defined %}
+{{ repo_config.mint }}
+{% endif %}

@@ -1,0 +1,7 @@
+# playbooks/base.yml
+---
+- name: Základní konfigurace všech systémů
+  hosts: all
+  roles:
+    - repo_manager
+  tags: repos

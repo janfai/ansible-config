@@ -1,0 +1,4 @@
+repo_config:
+  main: "deb http://archive.ubuntu.com/ubuntu jammy main restricted universe multiverse"
+  updates: "deb http://archive.ubuntu.com/ubuntu jammy-updates main restricted universe multiverse"
+  security: "deb http://security.ubuntu.com/ubuntu jammy-security main restricted universe multiverse"

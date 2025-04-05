@@ -1,0 +1,4 @@
+repo_config:
+  main: "deb http://archive.ubuntu.com/ubuntu noble main restricted universe multiverse"
+  updates: "deb http://archive.ubuntu.com/ubuntu noble-updates main restricted universe multiverse"
+  security: "deb http://security.ubuntu.com/ubuntu noble-security main restricted universe multiverse"
