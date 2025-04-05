@@ -1,7 +1,31 @@
 # Ansible Pull konfigurace pro správu stanic a serverů
 
-Spusťte bootstrap na cílové stanici:
+Spusťte universal-bootstrap.sh na cílovém serveru nebo stanici:
 ```
-curl -O https://raw.githubusercontent.com/janfai/ansible-config/main/bootstrap-vm-mint.sh && chmod +x bootstrap-vm-mint.sh && sudo ./bootstrap-vm-mint.sh
+curl -O https://raw.githubusercontent.com/janfai/ansible-config/main/universal-bootstrap.sh && chmod +x universal-bootstrap.sh
+```
 
+## Použití:
+```bash
+# Pro VM-Mint
 ```
+sudo ./universal-bootstrap.sh -i inventories/vm-mint -p playbooks/vm-mint.yml
+```
+# Pro Debian stanici
+```
+sudo ./universal-bootstrap.sh -i inventories/debian-desktop -p playbooks/workstation.yml
+```
+# Pro server
+```
+sudo ./universal-bootstrap.sh -i inventories/production-server -p playbooks/server.yml
+```
+
+## Výhody tohoto řešení:
+1. **Univerzálnost**: Jediný skript pro všechny typy zařízení
+2. **Parametrizace**: Možnost specifikovat inventory a playbook
+3. **Bezpečnost**: Heslo Vaultu se nikde neukládá v plaintextu
+4. **Idempotence**: Lze spouštět opakovaně bez vedlejších účinků
+5. **Integrace s cronem**: Můžete přidat cron úlohu pro pravidelnou aktualizaci
+
+## Doporučené vylepšení:
+Pro automatizované nasazení na více zařízení můžete vytvořit wrapper skript, který bude spouštět tento univerzální bootstrap s různými parametry.
