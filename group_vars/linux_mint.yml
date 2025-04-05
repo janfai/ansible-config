@@ -1,0 +1,4 @@
+mint_ubuntu_mapping:
+  victoria: jammy    # Mint 21 → Ubuntu 22.04
+  uma: focal         # Mint 20.3 → Ubuntu 20.04
+  ulyana: focal      # Mint 20 → Ubuntu 20.04

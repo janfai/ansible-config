@@ -1,11 +1,10 @@
+{# Pro Debian #}
 {% if ansible_distribution == 'Debian' %}
 deb http://deb.debian.org/debian {{ ansible_distribution_release }} main contrib non-free
 deb-src http://deb.debian.org/debian {{ ansible_distribution_release }} main contrib non-free
 
-deb http://security.debian.org/debian-security {{ ansible_distribution_release }}-security main contrib non-free
-deb-src http://security.debian.org/debian-security {{ ansible_distribution_release }}-security main contrib non-free
-
-{% elif ansible_distribution == 'Linux Mint' %}
+{# Pro Linux Mint #}
+{% elif ansible_distribution == 'LinuxMint' %}
 deb http://archive.ubuntu.com/ubuntu {{ mint_ubuntu_codename }} main restricted universe multiverse
 deb http://security.ubuntu.com/ubuntu {{ mint_ubuntu_codename }}-security main restricted universe multiverse
 deb http://packages.linuxmint.com {{ ansible_distribution_release }} main upstream import backport

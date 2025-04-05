@@ -1,18 +1,22 @@
 ---
 # Základní konfigurace pro všechny systémy
 
-- name: Aktualizovat cache balíčků
-  apt:
-    update_cache: yes
-    cache_valid_time: 3600
-  become: yes
+- name: Nastavit Ubuntu codename pro Linux Mint
+  set_fact:
+    mint_ubuntu_codename: "{{ mint_ubuntu_mapping[ansible_distribution_release | lower] }}"
+  when: ansible_distribution == 'LinuxMint'
 
 - name: Nastavit české repozitáře
   template:
     src: sources.list.j2
     dest: /etc/apt/sources.list
+  notify: update_cache
+
+- name: Aktualizovat cache balíčků
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
   become: yes
-  notify: aktualizovat apt cache
 
 - name: Nastavit locale
   include_tasks: locale.yml
@@ -37,3 +41,17 @@
       - fail2ban
     state: present
   become: yes
+
+
+
+
+- name: Nastavit Ubuntu codename pro Linux Mint
+  set_fact:
+    mint_ubuntu_codename: "{{ mint_ubuntu_mapping[ansible_distribution_release | lower] }}"
+  when: ansible_distribution == 'LinuxMint'
+
+- name: Nastavit české repozitáře
+  template:
+    src: sources.list.j2
+    dest: /etc/apt/sources.list
+  notify: update_cache

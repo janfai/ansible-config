@@ -4,7 +4,8 @@
   become: yes
   vars_files:
     - ../group_vars/all/vault.yml
+    - ../group_vars/linux_mint.yml
   roles:
-    - role: base
-    - role: workstation
-    - role: postfix
+    - { role: base, tags: base }
+    - { role: workstation, tags: workstation }
+    - { role: postfix, tags: postfix }
