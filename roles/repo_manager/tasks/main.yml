@@ -7,6 +7,12 @@
     remote_src: yes
   become: yes
 
+- name: Přidat podporu pro HTTPS
+  apt:
+    name: ca-certificates
+    state: present
+    update_cache: yes
+
 - name: Vytvořit nový official-package-repositories.list
   template:
     src: templates/sources.list.j2
