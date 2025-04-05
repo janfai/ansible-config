@@ -1,6 +1,6 @@
 ---
 - name: Základní konfigurace testovací VM
-  hosts: vm-mint
+  hosts: mint_workstations
   become: yes
   vars_files:
     - ../group_vars/all/vars.yml
