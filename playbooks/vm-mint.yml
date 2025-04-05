@@ -3,11 +3,8 @@
   hosts: vm-mint
   become: yes
   vars_files:
-    - "{{ playbook_dir }}/../group_vars/all/vault.yml"
+    - ../group_vars/all/vault.yml
   roles:
     - role: base
-      tags: base
     - role: workstation
-      tags: workstation
     - role: postfix
-      tags: postfix
