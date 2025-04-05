@@ -13,7 +13,7 @@ barta.homelinux.net
 milan.homelinux.net
 hill.homelinux.net
 lucia.homelinux.net
-vm-mint ansible_connection=local
+vm-mint ansible_connection=local ansible_host=vm-mint
 
 # Debian
 [debian_workstations:children]
