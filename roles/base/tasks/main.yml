@@ -12,7 +12,7 @@
       apt_repository:
         repo: "deb http://packages.linuxmint.com {{ mint_repo_codename }} main upstream import backport"
         state: present
-  when: ansible_distribution == 'LinuxMint'
+  when: ansible_distribution == 'Linux Mint'
 
 - name: Aktualizovat cache balíčků
   apt:
@@ -54,7 +54,7 @@
       - language-pack-gnome-cs
     state: present
   when: 
-    - ansible_distribution == 'LinuxMint'
+    - ansible_distribution == 'Linux Mint'
     - ansible_distribution_release in ['victoria', 'vera']  # Pouze pro podporované verze
   tags: [packages, localization]
 

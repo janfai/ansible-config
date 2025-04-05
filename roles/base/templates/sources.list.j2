@@ -4,7 +4,7 @@ deb http://deb.debian.org/debian {{ ansible_distribution_release }} main contrib
 deb-src http://deb.debian.org/debian {{ ansible_distribution_release }} main contrib non-free
 
 {# Pro Linux Mint #}
-{% elif ansible_distribution == 'LinuxMint' %}
+{% elif ansible_distribution == 'Linux Mint' %}
 deb http://archive.ubuntu.com/ubuntu {{ mint_ubuntu_codename }} main restricted universe multiverse
 deb http://security.ubuntu.com/ubuntu {{ mint_ubuntu_codename }}-security main restricted universe multiverse
 deb http://packages.linuxmint.com {{ ansible_distribution_release }} main upstream import backport
