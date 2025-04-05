@@ -49,4 +49,4 @@
     mode: 0750
   tags: postfix
 
-- include_tasks: send_notification.yml
+- include_tasks: send_test_notification.yml
