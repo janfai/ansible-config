@@ -2,5 +2,6 @@
 
 Spusťte bootstrap na cílové stanici:
 ```
-curl -sSL https://raw.githubusercontent.com/janfai/ansible-config/main/bootstrap-vm-mint.sh | sudo bash
+curl -O https://raw.githubusercontent.com/janfai/ansible-config/main/bootstrap-vm-mint.sh && chmod +x bootstrap-vm-mint.sh && sudo ./bootstrap-vm-mint.sh
+
 ```
