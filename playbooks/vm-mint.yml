@@ -7,7 +7,7 @@
   roles:
     - role: base
       tags: base
-    - role: workstation/mint
+    - role: workstation
       tags: workstation
     - role: postfix
       tags: postfix
