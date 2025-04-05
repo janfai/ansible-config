@@ -1,5 +1,4 @@
 ---
-# Nastavení UFW firewallu
 - name: Instalace UFW
   apt:
     name: ufw
@@ -12,7 +11,7 @@
 - name: Povolení SSH
   community.general.ufw:
     rule: allow
-    port: 22
+    port: "22"  # Explicitně jako string
     proto: tcp
 
 - name: Nastavení výchozích politik
@@ -20,5 +19,5 @@
     policy: "{{ item.policy }}"
     direction: "{{ item.direction }}"
   loop:
-    - { policy: allow, direction: in }
-    - { policy: allow, direction: out }
+    - { policy: allow, direction: incoming }
+    - { policy: allow, direction: outgoing }
