@@ -42,8 +42,14 @@
     state: present
   become: yes
 
-
-
+- name: Install Czech language packs for Mint
+  apt:
+    name:
+      - language-pack-cs-base
+      - language-pack-gnome-cs
+    state: present
+  when: 
+    - ansible_distribution == 'LinuxMint'
 
 - name: Nastavit Ubuntu codename pro Linux Mint
   set_fact:
