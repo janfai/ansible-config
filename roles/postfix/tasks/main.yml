@@ -1,0 +1,17 @@
+- name: Vytvořit sasl_passwd soubor pro Postfix
+  template:
+    src: sasl_passwd.j2
+    dest: /etc/postfix/sasl_passwd
+    owner: root
+    group: root
+    mode: '0600'
+  notify: restart postfix
+
+- name: Vytvořit databázi sasl_passwd.db
+  command: postmap /etc/postfix/sasl_passwd
+  notify: restart postfix
+
+- name: Restartovat Postfix po změně konfigurace
+  service:
+    name: postfix
+    state: restarted

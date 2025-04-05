@@ -9,7 +9,7 @@
       - libreoffice
       - vlc
       - gimp
-      - transmission
+      - deluge
     state: present
     
 - name: Nastavení Postfix pro odesílání emailů jako satelit

@@ -21,14 +21,22 @@ sudo apt update && sudo apt install -y git ansible
 sudo mkdir -p "$ANSIBLE_DIR"
 sudo chmod 750 "$ANSIBLE_DIR"
 
-# Generování náhodného hesla pro Vault (pouze při prvním spuštění)
+# Získání hesla pro Vault (pouze při prvním spuštění)
 if [ ! -f "$VAULT_PASS_FILE" ]; then
-    echo "Generuji nové náhodné heslo pro Ansible Vault..."
-    VAULT_PASS=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 32)
+    echo "Zadejte heslo pro Ansible Vault (nebude zobrazeno):"
+    read -s -r VAULT_PASS
+    echo "Zadejte heslo znovu pro ověření:"
+    read -s -r VAULT_PASS_CONFIRM
+
+    if [ "$VAULT_PASS" != "$VAULT_PASS_CONFIRM" ]; then
+        echo "Chyba: Hesla se neshodují. Bootstrap přerušen."
+        exit 1
+    fi
+
     echo "$VAULT_PASS" | sudo tee "$VAULT_PASS_FILE" >/dev/null
     sudo chmod 600 "$VAULT_PASS_FILE"
-    echo "HESLO PRO ANSIBLE VAULT: $VAULT_PASS"
-    echo "Toto heslo si poznamenejte a bezpečně uložte. Nebude zobrazeno znovu!"
+    unset VAULT_PASS VAULT_PASS_CONFIRM
+    echo "Heslo úspěšně nastaveno."
 fi
 
 # Klonování repozitáře

@@ -8,7 +8,7 @@ readme_directory = no
 myhostname = {{ ansible_hostname }}
 myorigin = {{ ansible_domain }}
 mydestination = {{ ansible_hostname }}, localhost
-relayhost = [smtp.gmail.com]:587
+relayhost = [{{ postfix_relay_host }}]:587
 inet_interfaces = loopback-only
 inet_protocols = ipv4
 
