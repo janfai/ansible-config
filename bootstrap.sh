@@ -8,7 +8,7 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 # Nastavení proměnných
-GIT_REPO="https://github.com/vas-uzivatel/ansible-config.git"
+GIT_REPO="https://github.com/janfai/ansible-config.git"
 GIT_BRANCH="main"
 ANSIBLE_DIR="/var/lib/ansible"
 LOG_DIR="/var/log/ansible"
