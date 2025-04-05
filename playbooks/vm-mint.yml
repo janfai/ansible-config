@@ -3,8 +3,10 @@
   hosts: vm-mint
   become: yes
   vars_files:
+    - ../group_vars/all/vars.yml
     - ../group_vars/all/vault.yml
     - ../group_vars/linux_mint.yml
+
   roles:
     - { role: base, tags: base }
     - { role: workstation, tags: workstation }
