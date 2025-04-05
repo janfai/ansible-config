@@ -2,7 +2,7 @@
 # Automaticky generováno Ansible
 
 {% if ansible_distribution == 'Linux Mint' %}
-deb https://mirrors.nic.cz/linuxmint {{ ansible_distribution_release | lower }} main upstream import backport
+deb https://mirrors.nic.cz/linuxmint-packages {{ ansible_distribution_release | lower }} main upstream import backport
 
 deb https://mirrors.nic.cz/ubuntu {{ mint_ubuntu_codename }} main restricted universe multiverse
 deb https://mirrors.nic.cz/ubuntu {{ mint_ubuntu_codename }}-updates main restricted universe multiverse
