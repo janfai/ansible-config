@@ -1,7 +1,0 @@
----
-# Handlery pro Mint pracovní stanici
-
-- name: restart postfix
-  service:
-    name: postfix
-    state: restarted

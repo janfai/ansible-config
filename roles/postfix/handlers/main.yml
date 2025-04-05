@@ -1,5 +1,5 @@
 ---
-# Handlery pro Debian pracovní stanici
+# Handlery pro Postfix
 
 - name: restart postfix
   service:

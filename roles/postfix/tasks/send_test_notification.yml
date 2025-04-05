@@ -1,0 +1,16 @@
+---
+- name: Odeslání testovací notifikace
+  community.general.mail:
+    host: "{{ mail_host }}"
+    port: "{{ mail_port }}"
+    secure: starttls
+    username: "{{ mail_username }}"
+    password: "{{ postfix_relay_password }}"
+    from: "Ansible Notifikace <{{ mail_username }}>"
+    to: "{{ mail_recipient }}"
+    subject: "Status: {{ ansible_hostname }}"
+    body: |
+      Bootstrap dokončen úspěšně
+      Čas: {{ ansible_date_time.iso8601 }}
+  delegate_to: localhost
+  run_once: true

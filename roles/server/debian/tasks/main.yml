@@ -1,0 +1,14 @@
+---
+# Konfigurace pro Debian servery
+
+- name: Instalace běžných uživatelských balíčků
+  apt:
+    name:
+      - monit
+    state: present
+    
+- name: Nastavení Postfix pro odesílání emailů jako satelit
+  include_tasks: postfix.yml
+  
+- name: Nastavení UFW firewallu
+  include_tasks: ufw.yml

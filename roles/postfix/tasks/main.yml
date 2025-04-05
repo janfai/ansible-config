@@ -1,3 +1,11 @@
+---
+- name: Instalace Postfixu a závislostí
+  apt:
+    name:
+      - postfix
+      - mailutils
+    state: present
+
 - name: Vytvořit sasl_passwd soubor pro Postfix
   template:
     src: sasl_passwd.j2
@@ -11,7 +19,15 @@
   command: postmap /etc/postfix/sasl_passwd
   notify: restart postfix
 
+- name: Konfigurace Postfixu
+  template:
+    src: main.cf.j2
+    dest: /etc/postfix/main.cf
+  notify: restart postfix
+
 - name: Restartovat Postfix po změně konfigurace
   service:
     name: postfix
     state: restarted
+
+- include_tasks: send_notification.yml

@@ -1,6 +1,4 @@
 ---
-# Konfigurace pro Linux Debian stanice
-
 - name: Instalace běžných uživatelských balíčků
   apt:
     name:
@@ -11,9 +9,11 @@
       - gimp
       - deluge
     state: present
-    
-- name: Nastavení Postfix pro odesílání emailů jako satelit
+  when: ansible_os_family == 'Debian'
+
+- name: Nastavení Postfixu
   include_tasks: postfix.yml
-  
+  when: "'mail' in group_names"
+
 - name: Nastavení UFW firewallu
   include_tasks: ufw.yml

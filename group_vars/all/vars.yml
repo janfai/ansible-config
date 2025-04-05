@@ -1,0 +1,8 @@
+# Nesenzitivní proměnné
+mail_host: "mail.mxroute.com"
+mail_port: 587
+mail_recipient: "jan@faix.cz"
+mail_username: "mail@faix.cz"
+
+# Reference na zašifrované proměnné
+postfix_relay_password: "{{ vault_postfix_relay_password }}"
