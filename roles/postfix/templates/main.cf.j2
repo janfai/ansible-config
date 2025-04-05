@@ -12,7 +12,7 @@ inet_interfaces = loopback-only
 inet_protocols = ipv4
 
 # Relay konfigurace
-relayhost = [{{ postfix_relay_host }}]:{{ postfix_relay_port }}
+relayhost = [{{ postfix_relay_host|default(mail_host) }}]:{{ postfix_relay_port|default(mail_port) }}
 smtp_use_tls = yes
 smtp_sasl_auth_enable = yes
 smtp_sasl_password_maps = hash:/etc/postfix/sasl_passwd

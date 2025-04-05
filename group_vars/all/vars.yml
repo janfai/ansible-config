@@ -1,3 +1,4 @@
+# group_vars/all/vars.yml
 # Nesenzitivní proměnné
 mail_host: "mail.mxroute.com"
 mail_port: 587
@@ -6,3 +7,4 @@ mail_username: "mail@faix.cz"
 
 # Reference na zašifrované proměnné
 postfix_relay_password: "{{ vault_postfix_relay_password }}"
+postfix_relay_port: "{{ mail_port }}"  # Alias pro kompatibilitu

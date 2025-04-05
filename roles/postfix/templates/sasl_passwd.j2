@@ -1,1 +1,2 @@
-[{{ mail_host }}]:587 {{ mail_username }}:{{ postfix_relay_password }}
+{# roles/postfix/templates/sasl_passwd.j2 #}
+[{{ mail_host }}]:{{ mail_port }} {{ mail_username }}:{{ postfix_relay_password }}
