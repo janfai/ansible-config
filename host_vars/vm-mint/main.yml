@@ -1,3 +1,4 @@
+# host_vars/vm-mint/main.yml
 ---
 hostname: vm-mint
 domain: test.homelinux.net

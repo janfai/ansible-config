@@ -6,6 +6,8 @@
     - ../group_vars/all/vars.yml
     - ../group_vars/all/vault.yml
     - ../group_vars/linux_mint.yml
+    - ../group_vars/mint_workstations.yml  # Explicitní načtení skupinových proměnných
+    - ../host_vars/vm-mint/main.yml        # Explicitní načtení host-specifických proměnných
 
   roles:
     - { role: base, tags: base }

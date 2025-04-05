@@ -1,2 +1,0 @@
-[mint_workstations]
-vm-mint ansible_connection=local  # Explicitně definujte hostname

@@ -5,8 +5,8 @@ append_dot_mydomain = no
 readme_directory = no
 
 # Základní konfigurace Postfixu
-myhostname = {{ ansible_hostname }}.{{ domain }}
-mydomain = {{ domain }}
+myhostname = {{ ansible_hostname }}.{{ domain | default('localdomain') }}
+mydomain = {{ domain | default('localdomain') }}
 myorigin = $mydomain
 inet_interfaces = loopback-only
 inet_protocols = ipv4
