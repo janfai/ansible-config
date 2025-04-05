@@ -1,0 +1,10 @@
+---
+hostname: vm-mint
+domain: test.homelinux.net
+ansible_user: testuser
+postfix_relay_host: home-server.homelan
+postfix_admin_email: jan@faix.cz
+dns_servers:
+  - 192.168.122.1
+ntp_servers:
+  - 192.168.122.1

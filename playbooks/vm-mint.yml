@@ -1,0 +1,17 @@
+---
+- name: Základní konfigurace testovací VM
+  hosts: vm-mint
+  become: yes
+  roles:
+    - base
+    - workstation/mint
+    - postfix
+
+- name: Testovací notifikace
+  mail:
+    host: "{{ postfix_relay_host }}"
+    port: 25
+    to: "{{ postfix_admin_email }}"
+    subject: "Testovací notifikace z {{ ansible_hostname }}"
+    body: "Testovací VM {{ ansible_hostname }} byla úspěšně nakonfigurována"
+  delegate_to: localhost

@@ -1,0 +1,2 @@
+[mint_workstations]
+vm-mint ansible_connection=local
