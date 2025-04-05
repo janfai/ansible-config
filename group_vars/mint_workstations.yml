@@ -1,14 +1,13 @@
 # group_vars/mint_workstations.yml
 ---
 mint_ubuntu_mapping:
-  victoria: jammy
-  vera: jammy
-  uma: focal
-  ulyana: focal
+  victoria: jammy    # Mint 21 → Ubuntu 22.04
+  vera: jammy        # Mint 21.1 → Ubuntu 22.04
+  ulyana: focal      # Mint 20 → Ubuntu 20.04
+
 mint_repo_codename: "{{ ansible_distribution_release | lower }}"
+mint_ubuntu_codename: "{{ mint_ubuntu_mapping[ansible_distribution_release | lower] }}"
 
 domain: homelinux.net
 desktop_environment: cinnamon
-common_packages:
-  - firefox
-  - vlc
+

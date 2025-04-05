@@ -1,10 +1,24 @@
 {# roles/repo_manager/templates/sources.list.j2 #}
 # Automaticky generováno Ansible
+
+{% if ansible_distribution == 'Linux Mint' %}
+deb http://mirror.nic.cz/linuxmint {{ ansible_distribution_release | lower }} main upstream import backport
+
+deb http://mirror.nic.cz/ubuntu {{ mint_ubuntu_codename }} main restricted universe multiverse
+deb http://mirror.nic.cz/ubuntu {{ mint_ubuntu_codename }}-updates main restricted universe multiverse
+deb http://mirror.nic.cz/ubuntu {{ mint_ubuntu_codename }}-backports main restricted universe multiverse
+
+deb http://mirror.nic.cz/ubuntu {{ mint_ubuntu_codename }}-security main restricted universe multiverse
+{% elif ansible_distribution == 'Ubuntu' %}
 {{ repo_config.main }}
 {{ repo_config.security }}
 {% if repo_config.updates is defined %}
 {{ repo_config.updates }}
 {% endif %}
-{% if repo_config.mint is defined %}
-{{ repo_config.mint }}
+{% elif ansible_distribution == 'Debian' %}
+{{ repo_config.main }}
+{{ repo_config.security }}
+{% if repo_config.updates is defined %}
+{{ repo_config.updates }}
+{% endif %}
 {% endif %}

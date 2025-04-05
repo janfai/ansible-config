@@ -1,16 +1,16 @@
 # roles/repo_manager/tasks/main.yml
 ---
-- name: Záloha původního sources.list
+- name: Záloha původního official-package-repositories.list
   copy:
-    src: "/etc/apt/sources.list"
-    dest: "/etc/apt/sources.list.bak_{{ ansible_date_time.iso8601 }}"
+    src: "/etc/apt/sources.list.d/official-package-repositories.list"
+    dest: "/etc/apt/sources.list.d/official-package-repositories.list.bak_{{ ansible_date_time.iso8601 }}"
     remote_src: yes
   become: yes
 
-- name: Vytvořit nový sources.list
+- name: Vytvořit nový official-package-repositories.list
   template:
     src: templates/sources.list.j2
-    dest: /etc/apt/sources.list
+    dest: /etc/apt/sources.list.d/official-package-repositories.list
     mode: '0644'
   become: yes
   notify: update_cache
@@ -24,3 +24,6 @@
   when: repo_gpg_keys is defined
 
 - meta: flush_handlers
+
+
+

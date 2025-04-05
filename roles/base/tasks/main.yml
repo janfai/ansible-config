@@ -52,6 +52,13 @@
     name:
       - language-pack-cs-base
       - language-pack-gnome-cs
+      - firefox-locale-cs
+      - hunspell-cs
+      - libreoffice-l10n-cs
+      - thunderbird-locale-cs
+      - mythes-cs
+      - libreoffice-help-cs
+      - hyphen-cs
     state: present
   when: 
     - ansible_distribution == 'Linux Mint'
