@@ -1,32 +1,35 @@
 ---
-# Základní konfigurace pro všechny systémy
+# roles/base/tasks/main.yml
+# Optimalizovaná základní konfigurace
 
-- name: Nastavit Ubuntu codename pro Linux Mint
-  set_fact:
-    mint_ubuntu_codename: "{{ mint_ubuntu_mapping[ansible_distribution_release | lower] }}"
+- name: Nastavit proměnné pro Linux Mint
+  block:
+    - name: Zjistit kódové jméno Ubuntu
+      set_fact:
+        mint_ubuntu_codename: "{{ mint_ubuntu_mapping[ansible_distribution_release | lower] }}"
+    
+    - name: Přidat Mint repozitáře
+      apt_repository:
+        repo: "deb http://packages.linuxmint.com {{ mint_repo_codename }} main upstream import backport"
+        state: present
   when: ansible_distribution == 'LinuxMint'
-
-- name: Nastavit české repozitáře
-  template:
-    src: sources.list.j2
-    dest: /etc/apt/sources.list
-  notify: update_cache  # Název musí přesně odpovídat handleru
 
 - name: Aktualizovat cache balíčků
   apt:
     update_cache: yes
     cache_valid_time: 3600
   become: yes
+  tags: packages
 
-- name: Nastavit locale
+- name: Nastavit lokalizaci
   include_tasks: locale.yml
+  tags: localization
 
-- name: Nastavit timezone
-  copy:
-    content: "Europe/Prague\n"
-    dest: /etc/timezone
+- name: Nastavit časovou zónu
+  timezone:
+    name: Europe/Prague
   become: yes
-  notify: aktualizovat timezone
+  tags: time
 
 - name: Instalovat základní balíčky
   apt:
@@ -36,13 +39,15 @@
       - curl
       - wget
       - htop
-      - ntp
+      - mc
       - logrotate
       - fail2ban
     state: present
+    update_cache: no  # Cache již aktualizováno dříve
   become: yes
+  tags: packages
 
-- name: Install Czech language packs for Mint
+- name: Instalovat české jazykové balíčky pro Mint
   apt:
     name:
       - language-pack-cs-base
@@ -50,14 +55,5 @@
     state: present
   when: 
     - ansible_distribution == 'LinuxMint'
-
-- name: Nastavit Ubuntu codename pro Linux Mint
-  set_fact:
-    mint_ubuntu_codename: "{{ mint_ubuntu_mapping[ansible_distribution_release | lower] }}"
-  when: ansible_distribution == 'LinuxMint'
-
-- name: Nastavit české repozitáře
-  template:
-    src: sources.list.j2
-    dest: /etc/apt/sources.list
-  notify: update_cache
+    - ansible_distribution_release in ['victoria', 'vera']  # Pouze pro podporované verze
+  tags: [packages, localization]

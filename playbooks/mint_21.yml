@@ -1,0 +1,12 @@
+# playbooks/mint_21.yml
+---
+- name: Konfigurace pro Mint 21
+  hosts: mint_21
+  become: yes
+  vars_files:
+    - ../group_vars/mint_workstations.yml
+    - ../group_vars/mint_21.yml
+  roles:
+    - role: base
+    - role: workstation
+    - role: postfix

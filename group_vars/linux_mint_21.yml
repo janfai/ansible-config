@@ -1,3 +1,6 @@
+mint_repo_codename: victoria
+ubuntu_base_codename: jammy
+
 repo_config:
   base: "deb http://archive.ubuntu.com/ubuntu jammy main restricted universe multiverse"
   security: "deb http://security.ubuntu.com/ubuntu jammy-security main restricted universe multiverse"

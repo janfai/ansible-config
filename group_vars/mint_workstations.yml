@@ -1,0 +1,14 @@
+# group_vars/mint_workstations.yml
+---
+mint_ubuntu_mapping:
+  victoria: jammy
+  vera: jammy
+  uma: focal
+  ulyana: focal
+mint_repo_codename: "{{ ansible_distribution_release | lower }}"
+
+domain: homelinux.net
+desktop_environment: cinnamon
+common_packages:
+  - firefox
+  - vlc

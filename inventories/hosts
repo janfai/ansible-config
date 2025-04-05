@@ -1,11 +1,23 @@
-[linux_mint_20]
+# inventories/hosts
 
-[linux_mint_21]
+# Linux Mint
+[mint_workstations:children]
+mint_20
+mint_21
+
+[mint_20]
+horak.homelinux.net
+
+[mint_21]
 barta.homelinux.net
 milan.homelinux.net
-horak.homelinux.net
 hill.homelinux.net
 lucia.homelinux.net
+vm-mint ansible_connection=local
+
+# Debian
+[debian_workstations:children]
+debian_12
 
 [debian_12]
 home-server.homelan
@@ -14,9 +26,18 @@ home-laptop.homelan
 faix-desktop.homelan
 faix-laptop.homelan
 
-[ubuntu_2204]
+# Ubuntu
+[ubuntu_servers:children]
+ubuntu_2004
+ubuntu_2204
+ubuntu_2404
+
+[ubuntu_2004]
 zviretnik.eu
-elstarmont.eu
 vps.faix.cz
 
+[ubuntu_2204]
+elstarmont.eu
+
 [ubuntu_2404]
+# Budoucí servery s Ubuntu 24.04
