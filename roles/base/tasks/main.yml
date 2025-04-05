@@ -57,3 +57,8 @@
     - ansible_distribution == 'LinuxMint'
     - ansible_distribution_release in ['victoria', 'vera']  # Pouze pro podporované verze
   tags: [packages, localization]
+
+# Kontrola faktů
+- name: Zobrazit detekovanou distribuci
+  debug:
+    msg: "Distribuce: {{ ansible_distribution }}, Verze: {{ ansible_distribution_release }}"

@@ -14,8 +14,6 @@ milan.homelinux.net
 hill.homelinux.net
 lucia.homelinux.net
 vm-mint ansible_connection=local ansible_host=vm-mint  # Explicitní alias
-vm-mint  # Záložní záznam pro krátké jméno
-vm-mint.homelinux.net  # FQDN verze
 
 # Debian
 [debian_workstations:children]
