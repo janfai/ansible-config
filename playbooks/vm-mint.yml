@@ -3,9 +3,9 @@
   hosts: vm-mint
   become: yes
   roles:
-    - base
-    - workstation/mint
-    - postfix
+    - { role: base, tags: base }
+    - { role: workstation/mint, tags: workstation }
+    - { role: postfix, tags: postfix }
 
 - name: Testovací notifikace
   mail:

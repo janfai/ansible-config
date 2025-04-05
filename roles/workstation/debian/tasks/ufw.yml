@@ -1,0 +1,22 @@
+---
+# Nastavení UFW firewallu
+
+- name: Instalace UFW
+  apt:
+    name: ufw
+    state: present
+    
+- name: Povolení UFW
+  ufw:
+    state: enabled
+    policy: deny
+    
+- name: Povolení SSH
+  ufw:
+    rule: allow
+    port: ssh
+    
+- name: Povolení výchozích pravidel
+  ufw:
+    rule: allow
+    direction: outgoing

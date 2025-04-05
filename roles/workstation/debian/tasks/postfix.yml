@@ -1,0 +1,13 @@
+---
+# Nastavení Postfix
+
+- name: Instalace Postfixu
+  apt:
+    name: postfix
+    state: present
+  
+- name: Konfigurace Postfix main.cf
+  template:
+    src: postfix_main.cf.j2
+    dest: /etc/postfix/main.cf
+  notify: restart postfix

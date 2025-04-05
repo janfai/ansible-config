@@ -1,0 +1,7 @@
+---
+# Handlery pro Debian pracovní stanici
+
+- name: restart postfix
+  service:
+    name: postfix
+    state: restarted
