@@ -10,7 +10,7 @@
   template:
     src: sources.list.j2
     dest: /etc/apt/sources.list
-  notify: update_cache
+  notify: update_cache  # Název musí přesně odpovídat handleru
 
 - name: Aktualizovat cache balíčků
   apt:
