@@ -6,15 +6,15 @@ curl -O https://raw.githubusercontent.com/janfai/ansible-config/main/universal-b
 ```
 
 ## Použití:
-# Pro VM-Mint
+### Pro VM-Mint
 ```bash
 sudo ./universal-bootstrap.sh -i inventories/vm-mint -p playbooks/vm-mint.yml
 ```
-# Pro Debian stanici
+### Pro Debian stanici
 ```bash
 sudo ./universal-bootstrap.sh -i inventories/debian-desktop -p playbooks/workstation.yml
 ```
-# Pro server
+### Pro server
 ```bash
 sudo ./universal-bootstrap.sh -i inventories/production-server -p playbooks/server.yml
 ```
