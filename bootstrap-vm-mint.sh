@@ -39,8 +39,17 @@ if [ ! -f "$VAULT_PASS_FILE" ]; then
     echo "Heslo úspěšně nastaveno."
 fi
 
-# Klonování repozitáře
-sudo git -C "$ANSIBLE_DIR" clone https://github.com/janfai/ansible-config.git .
+# Klonování/aktualizace repozitáře
+if [ -d "$ANSIBLE_DIR/.git" ]; then
+    echo "Aktualizuji existující repozitář..."
+    sudo git -C "$ANSIBLE_DIR" reset --hard
+    sudo git -C "$ANSIBLE_DIR" clean -fd
+    sudo git -C "$ANSIBLE_DIR" pull --force
+else
+    echo "Klonuji nový repozitář..."
+    sudo rm -rf "$ANSIBLE_DIR"/* 2>/dev/null || true
+    sudo git clone https://github.com/janfai/ansible-config.git "$ANSIBLE_DIR"
+fi
 
 # Čištění při chybě
 cleanup() {
