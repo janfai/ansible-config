@@ -1,0 +1,18 @@
+#!/usr/bin/env python3
+import json
+import subprocess
+from pathlib import Path
+
+state_path = Path('/var/lib/stanice/ansible-pull-failures')
+try:
+    count = int(state_path.read_text().strip()) + 1
+except (FileNotFoundError, ValueError):
+    count = 1
+state_path.parent.mkdir(mode=0o750, parents=True, exist_ok=True)
+state_path.write_text(f'{count}\n')
+state_path.chmod(0o600)
+if count == 3:
+    settings = json.loads(Path('/etc/ansible/reporting.json').read_text())
+    signature = settings['admin_signature']
+    mail = f"To: {settings['admin_email']}, {settings['user_email']}\nSubject: Stanice nemohla stáhnout konfiguraci\nContent-Type: text/plain; charset=UTF-8\n\nAhoj, stanici se třikrát nepodařilo stáhnout a použít správu. Ozvu se ti.\n\n{signature}\n"
+    subprocess.run(['/usr/sbin/sendmail', '-t'], input=mail.encode(), check=True)

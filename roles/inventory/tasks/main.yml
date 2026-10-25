@@ -1,0 +1,36 @@
+---
+- name: Zajistit adresář s referenčním seznamem balíčků
+  ansible.builtin.file:
+    path: /usr/share/stanice
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  when: station_config.inventory_enabled | default(false)
+
+- name: Nainstalovat referenční seznam balíčků čistého Mintu
+  ansible.builtin.copy:
+    src: mint-clean-manual.txt
+    dest: "{{ inventory_baseline_file }}"
+    owner: root
+    group: root
+    mode: '0644'
+  when: station_config.inventory_enabled | default(false)
+
+- name: Nainstalovat jednorázový sběr inventáře
+  ansible.builtin.copy:
+    src: inventory.py
+    dest: /usr/local/sbin/stanice-inventory
+    owner: root
+    group: root
+    mode: '0750'
+  when: station_config.inventory_enabled | default(false)
+
+- name: Sestavit a odeslat inventář první stanice
+  ansible.builtin.command:
+    argv:
+      - /usr/local/sbin/stanice-inventory
+  register: inventory_run
+  changed_when: inventory_run.rc == 0
+  failed_when: inventory_run.rc not in [0, 10]
+  when: station_config.inventory_enabled | default(false)

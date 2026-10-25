@@ -1,0 +1,7 @@
+---
+- name: Vygenerovat české prostředí
+  ansible.builtin.command:
+    argv:
+      - locale-gen
+      - cs_CZ.UTF-8
+  changed_when: true

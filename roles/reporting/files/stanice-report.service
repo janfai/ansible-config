@@ -1,0 +1,7 @@
+[Unit]
+Description=Týdenní přehled stavu stanice
+After=network-online.target postfix.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/stanice-report weekly

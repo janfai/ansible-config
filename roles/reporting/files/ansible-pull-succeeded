@@ -1,0 +1,4 @@
+#!/usr/bin/env python3
+from pathlib import Path
+Path('/var/lib/stanice/ansible-pull-failures').write_text('0\n')
+Path('/var/lib/stanice/ansible-pull-failures').chmod(0o600)

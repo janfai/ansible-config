@@ -1,0 +1,129 @@
+---
+- name: Vytvořit adresář stavu stanic
+  ansible.builtin.file:
+    path: /var/lib/stanice
+    state: directory
+    owner: root
+    group: root
+    mode: '0750'
+
+- name: Vytvořit adresář profylaktických přehledů
+  ansible.builtin.file:
+    path: /var/lib/stanice-report
+    state: directory
+    owner: root
+    group: root
+    mode: '0750'
+
+- name: Vytvořit omezený SSH klíč pro odesílání přehledů
+  ansible.builtin.command:
+    argv:
+      - ssh-keygen
+      - -q
+      - -t
+      - ed25519
+      - -N
+      - ''
+      - -C
+      - "stanice-report-{{ station_id }}"
+      - -f
+      - /var/lib/stanice-report/id_ed25519
+    creates: /var/lib/stanice-report/id_ed25519
+  register: reporting_ssh_key
+  changed_when: reporting_ssh_key.rc == 0
+
+- name: Nastavit oprávnění reportovacího SSH klíče
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - path: /var/lib/stanice-report/id_ed25519
+      mode: '0600'
+    - path: /var/lib/stanice-report/id_ed25519.pub
+      mode: '0644'
+
+- name: Připnout ověřený SSH klíč VPS pro Git
+  ansible.builtin.copy:
+    src: reports-known-hosts
+    dest: /var/lib/stanice-report/known_hosts
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Uložit neveřejné adresy pro zprávy
+  ansible.builtin.copy:
+    dest: /etc/ansible/reporting.json
+    content: "{{ reporting_settings | to_json }}\n"
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true
+  vars:
+    reporting_settings:
+      admin_email: "{{ station_secrets.ADMIN_EMAIL }}"
+      user_email: "{{ station_secrets.USER_EMAIL }}"
+      admin_signature: "{{ station_secrets.ADMIN_SIGNATURE }}"
+
+- name: Nainstalovat přehledový skript
+  ansible.builtin.copy:
+    src: reporting.py
+    dest: /usr/local/sbin/stanice-report
+    owner: root
+    group: root
+    mode: '0750'
+
+- name: Nainstalovat obsluhu výsledku ansible-pull
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: root
+    group: root
+    mode: '0750'
+  loop:
+    - src: ansible-pull-failed
+      dest: /usr/local/sbin/ansible-pull-failed
+    - src: ansible-pull-succeeded
+      dest: /usr/local/sbin/ansible-pull-succeeded
+
+- name: Nainstalovat jednotky pro upozornění při chybě
+  ansible.builtin.copy:
+    src: ansible-pull-failure.service
+    dest: /etc/systemd/system/ansible-pull-failure.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Načíst jednotky systemd
+
+- name: Nainstalovat službu týdenního přehledu
+  ansible.builtin.copy:
+    src: stanice-report.service
+    dest: /etc/systemd/system/stanice-report.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Načíst jednotky systemd
+
+- name: Nainstalovat časovače přehledu a kontrol
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: '0644'
+  loop:
+    - stanice-report.timer
+    - stanice-alerts.timer
+    - stanice-alerts.service
+  notify: Načíst jednotky systemd
+
+- name: Zapnout časovače přehledu a kontrol
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+    daemon_reload: true
+  loop:
+    - stanice-report.timer
+    - stanice-alerts.timer

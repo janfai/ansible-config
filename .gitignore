@@ -1,0 +1,10 @@
+*.retry
+*.pyc
+__pycache__/
+.ansible/
+*.vault_pass
+*.secret
+**/vault.yml
+
+secrets/*
+!secrets/*.enc.yaml

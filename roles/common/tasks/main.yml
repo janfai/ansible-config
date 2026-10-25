@@ -1,0 +1,106 @@
+---
+- name: Nainstalovat základní balíčky navíc proti čistému Mintu
+  ansible.builtin.apt:
+    name: "{{ mint_base_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Zajistit české prostředí
+  ansible.builtin.lineinfile:
+    path: /etc/locale.gen
+    regexp: '^#?cs_CZ.UTF-8 UTF-8$'
+    line: cs_CZ.UTF-8 UTF-8
+    create: true
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Vygenerovat české prostředí
+
+- name: Nastavit české výchozí prostředí
+  ansible.builtin.command:
+    argv:
+      - update-locale
+      - "LANG={{ mint_locale }}"
+  changed_when: false
+
+- name: Zjistit časové pásmo
+  ansible.builtin.command:
+    argv:
+      - timedatectl
+      - show
+      - --property=Timezone
+      - --value
+  register: timezone_current
+  changed_when: false
+
+- name: Nastavit časové pásmo
+  ansible.builtin.command:
+    argv:
+      - timedatectl
+      - set-timezone
+      - "{{ mint_timezone }}"
+  when: timezone_current.stdout != mint_timezone
+
+- name: Zjistit základní vydání Ubuntu této stanice
+  ansible.builtin.command:
+    argv:
+      - awk
+      - -F=
+      - '$1 == "UBUNTU_CODENAME" {gsub(/"/, "", $2); print $2}'
+      - /etc/os-release
+  register: ubuntu_codename
+  changed_when: false
+
+- name: Omezit automatické aktualizace na bezpečnostní opravy
+  ansible.builtin.template:
+    src: 50unattended-upgrades.j2
+    dest: /etc/apt/apt.conf.d/50unattended-upgrades
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Zapnout pravidelné hledání a instalaci bezpečnostních oprav
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    content: "APT::Periodic::Update-Package-Lists \"1\";\nAPT::Periodic::Unattended-Upgrade \"1\";\n"
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Upozornit při nedostatku místa v boot oddílu
+  ansible.builtin.shell: |
+    set -euo pipefail
+    used="$(df -P /boot | awk 'NR == 2 {sub(/%/, "", $5); print $5}')"
+    if [ "${used}" -ge "{{ boot_warning_percent }}" ]; then
+      logger -p user.warning -t ansible-common "Oddíl /boot je zaplněn z ${used} procent."
+    fi
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Zjistit nainstalované balíčky
+  ansible.builtin.package_facts:
+    manager: auto
+
+- name: Zjistit, zda je dostupný Timeshift
+  ansible.builtin.command:
+    argv:
+      - timeshift
+      - --list
+  register: timeshift_check
+  failed_when: false
+  changed_when: false
+  when: "'timeshift' in ansible_facts.packages"
+
+- name: Zaznamenat nedostupný Timeshift nebo chybějící snímky
+  ansible.builtin.command:
+    argv:
+      - logger
+      - -p
+      - user.warning
+      - -t
+      - ansible-common
+      - Timeshift není nainstalovaný nebo nemá dostupné snímky.
+  changed_when: false
+  when: "'timeshift' not in ansible_facts.packages or timeshift_check.rc != 0 or 'No snapshots found' in timeshift_check.stdout"

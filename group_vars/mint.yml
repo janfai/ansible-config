@@ -1,0 +1,16 @@
+---
+mint_base_packages:
+  - locales
+  - ncdu
+  - unattended-upgrades
+mint_locale: cs_CZ.UTF-8
+mint_timezone: Europe/Prague
+boot_warning_percent: 80
+station_ids:
+  - lada
+  - milan
+  - jitka
+  - lucie
+  - vlada
+  - alan
+  - vm-mint

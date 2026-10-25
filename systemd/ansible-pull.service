@@ -1,0 +1,14 @@
+[Unit]
+Description=Stažení a použití konfigurace stanice
+Wants=network-online.target
+After=network-online.target
+OnFailure=ansible-pull-failure.service
+
+[Service]
+Type=oneshot
+Environment=SOPS_AGE_KEY_FILE=/etc/ansible/age.key
+EnvironmentFile=/etc/ansible/ansible-pull.env
+WorkingDirectory=/var/lib/ansible-pull
+ExecStart=/usr/bin/ansible-pull -U https://github.com/janfai/ansible-config.git -C ${ANSIBLE_CONFIG_BRANCH} -d /var/lib/ansible-pull -i localhost, local.yml
+ExecStartPost=-/usr/local/sbin/ansible-pull-succeeded
+User=root

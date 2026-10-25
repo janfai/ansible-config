@@ -1,0 +1,21 @@
+---
+- name: Nainstalovat smartmontools
+  ansible.builtin.apt:
+    name: smartmontools
+    state: present
+
+- name: Nastavit smartd pro sledování všech disků
+  ansible.builtin.template:
+    src: smartd.conf.j2
+    dest: /etc/smartd.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restartovat smartd
+
+- name: Zapnout sledování disků
+  ansible.builtin.service:
+    name: smartmontools
+    state: started
+    enabled: true
+  when: ansible_virtualization_role != 'guest'

@@ -1,0 +1,6 @@
+[Unit]
+Description=Záznam neúspěšného stažení konfigurace
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/ansible-pull-failed

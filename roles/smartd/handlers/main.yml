@@ -1,0 +1,5 @@
+---
+- name: Restartovat smartd
+  ansible.builtin.service:
+    name: smartmontools
+    state: restarted

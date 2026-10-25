@@ -1,0 +1,12 @@
+[Unit]
+Description=Denní stažení konfigurace stanice
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=1d
+Persistent=true
+RandomizedDelaySec=1h
+Unit=ansible-pull.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,14 @@
+myhostname = {{ station_id }}.stanice.invalid
+mydomain = stanice.invalid
+myorigin = $myhostname
+mydestination = $myhostname, localhost.$mydomain, localhost
+inet_interfaces = loopback-only
+inet_protocols = ipv4
+relayhost = [{{ station_secrets.SMTP_RELAY_HOST }}]:{{ postfix_smtp_port }}
+smtp_tls_security_level = encrypt
+smtp_tls_CAfile = /etc/ssl/certs/ca-certificates.crt
+smtp_sasl_auth_enable = yes
+smtp_sasl_password_maps = hash:/etc/postfix/sasl_passwd
+smtp_generic_maps = hash:/etc/postfix/generic
+smtp_sasl_security_options = noanonymous
+smtp_sasl_tls_security_options = noanonymous

@@ -1,0 +1,7 @@
+[Unit]
+Description=Pravidelná kontrola stavu stanice
+After=network-online.target postfix.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/stanice-report alerts

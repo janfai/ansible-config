@@ -1,0 +1,11 @@
+[Unit]
+Description=Týdenní přehled stavu stanice
+
+[Timer]
+OnCalendar=Sun *-*-* 10:00:00
+Persistent=true
+RandomizedDelaySec=30min
+Unit=stanice-report.service
+
+[Install]
+WantedBy=timers.target
