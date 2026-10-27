@@ -1,6 +1,15 @@
 # Staging a povýšení změn
 
-Stanice používají `ansible_pull_branch` z `host_vars/<id>.yml`; pokud není nastaven, platí `main`. `vm-mint` (testovací `mint_test`) sleduje `staging`. Bootstrap nastaví počáteční větev a první úspěšný Ansible běh zapíše deklarovanou větev stanice do `/etc/ansible/ansible-pull.env` pro další ověřený pull.
+Stanice používají `ansible_pull_branch` z `host_vars/<id>.yml`; pokud není nastaven, platí `main`. `vm-mint` (testovací `mint_test`) sleduje `staging`. Bootstrap nastaví počáteční větev a první úspěšný Ansible běh zapíše deklarovanou větev stanice do `/etc/ansible/ansible-pull.env` pro další ověřený pull. Při prvním zprovoznění kanárka nastavte počáteční větev `staging` také v bootstrapu; existující stanici je nutné jednorázově přepnout na `staging`, protože konfigurace z `main` nemůže sama načíst změnu, která zatím existuje jen ve `staging`.
+
+V každém pracovním klonu nastavte SSH podepisování lokálně:
+
+```bash
+git config --local gpg.format ssh
+git config --local user.signingkey "$(realpath ~/.ssh/id_ed25519.pub)"
+git config --local commit.gpgsign true
+git config --local gpg.ssh.allowedSignersFile files/allowed_signers
+```
 
 ## Postup vydání
 
