@@ -37,10 +37,40 @@
           - station_id in station_ids
         fail_msg: Identita stanice chybí nebo není povolená.
 
+    - name: Zjistit dřívější instalaci Guardiana v opt
+      ansible.builtin.stat:
+        path: /opt/upgrade-guardian
+      register: guardian_opt_dir
+
+    - name: Zjistit dřívější konfiguraci Guardiana
+      ansible.builtin.stat:
+        path: /etc/upgrade-guardian
+      register: guardian_etc_dir
+
+    - name: Zjistit dřívější systemd unit Guardiana
+      ansible.builtin.stat:
+        path: /etc/systemd/system/upgrade-guardian.service
+      register: guardian_unit_file
+
+    - name: Zjistit dřívější data Guardiana
+      ansible.builtin.stat:
+        path: /var/lib/upgrade-guardian
+      register: guardian_var_dir
+
     - name: Načíst konfiguraci stanice
       ansible.builtin.include_vars:
         file: "host_vars/{{ station_id }}.yml"
         name: station_config
+
+    - name: Nastavit větev příštího ověřeného pullu
+      ansible.builtin.lineinfile:
+        path: /etc/ansible/ansible-pull.env
+        regexp: '^ANSIBLE_CONFIG_BRANCH='
+        line: "ANSIBLE_CONFIG_BRANCH={{ station_config.ansible_pull_branch | default('main') }}"
+        create: true
+        owner: root
+        group: root
+        mode: '0644'
 
     - name: Načíst šifrovaná tajemství stanice
       ansible.builtin.set_fact:
@@ -71,3 +101,12 @@
     - smartd
     - reporting
     - inventory
+    - role: guardian
+      guardian_enabled: "{{ station_config.guardian_enabled | default(false) }}"
+      guardian_provider: "{{ station_config.guardian_provider | default('codex') }}"
+      guardian_station_id: "{{ station_config.guardian_station_id | default(station_id) }}"
+      guardian_relay_url: "{{ station_config.guardian_relay_url | default('') }}"
+      when: >-
+        station_config.guardian_enabled | default(false) | bool or
+        guardian_opt_dir.stat.exists or guardian_etc_dir.stat.exists or
+        guardian_unit_file.stat.exists or guardian_var_dir.stat.exists

@@ -14,5 +14,7 @@ state_path.chmod(0o600)
 if count == 3:
     settings = json.loads(Path('/etc/ansible/reporting.json').read_text())
     signature = settings['admin_signature']
-    mail = f"To: {settings['admin_email']}, {settings['user_email']}\nSubject: Stanice nemohla stáhnout konfiguraci\nContent-Type: text/plain; charset=UTF-8\n\nAhoj, stanici se třikrát nepodařilo stáhnout a použít správu. Ozvu se ti.\n\n{signature}\n"
+    reason_path = Path('/var/lib/stanice/ansible-pull-failure-reason')
+    reason = reason_path.read_text().strip() if reason_path.exists() else 'Stažení nebo použití správy selhalo.'
+    mail = f"To: {settings['admin_email']}, {settings['user_email']}\nSubject: Stanice nemohla stáhnout konfiguraci\nContent-Type: text/plain; charset=UTF-8\n\nAhoj, stanici se třikrát nepodařilo stáhnout a použít správu.\nDůvod posledního selhání: {reason}\nOzvu se ti.\n\n{signature}\n"
     subprocess.run(['/usr/sbin/sendmail', '-t'], input=mail.encode(), check=True)

@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_dir="${ANSIBLE_PULL_REPO_DIR:-/var/lib/ansible-pull}"
+env_file="${ANSIBLE_PULL_ENV_FILE:-/etc/ansible/ansible-pull.env}"
+state_dir="${ANSIBLE_PULL_STATE_DIR:-/var/lib/ansible-pull-state}"
+failure_dir="${ANSIBLE_PULL_FAILURE_DIR:-/var/lib/stanice}"
+failure_unit="${ANSIBLE_PULL_FAILURE_UNIT:-ansible-pull-failure.service}"
+
+read_env_value() {
+    local key="$1"
+    sed -n "s/^${key}=//p" "$env_file" | tail -n 1 | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//"
+}
+
+branch="$(read_env_value ANSIBLE_CONFIG_BRANCH)"
+repository="$(read_env_value ANSIBLE_CONFIG_REPOSITORY)"
+if [[ -z "$branch" || -z "$repository" ]] || ! git -C "$repo_dir" check-ref-format --branch "$branch" >/dev/null; then
+    printf '%s\n' 'Konfigurace ansible-pull.env chybí nebo obsahuje neplatnou větev či URL.' >&2
+    exit 2
+fi
+
+failure() {
+    local message="$1"
+    install -d -m 0750 "$failure_dir"
+    printf '%s\n' "$message" > "$failure_dir/ansible-pull-failure-reason"
+    chmod 0600 "$failure_dir/ansible-pull-failure-reason"
+    logger -p user.err -t ansible-pull-verified "$message" || true
+    systemctl start "$failure_unit" || true
+}
+
+now="$(date +%s)"
+attempt_file="$state_dir/failed-commit-attempts"
+last_sha=''
+last_time=0
+attempts=0
+if [[ -r "$attempt_file" ]]; then
+    read -r last_sha last_time attempts < "$attempt_file" || true
+fi
+
+if ! git -C "$repo_dir" fetch --no-tags "$repository" "refs/heads/${branch}:refs/remotes/origin/${branch}"; then
+    failure 'Nelze stáhnout větev pro ověření podepsaného commitu.'
+    exit 1
+fi
+sha="$(git -C "$repo_dir" rev-parse "refs/remotes/origin/${branch}^{commit}")"
+
+if [[ "$last_sha" == "$sha" ]] && (( now - last_time < 3600 )) && (( attempts >= 3 )); then
+    failure "Ověření commitu ${sha} již třikrát selhalo během jedné hodiny; další pokus byl zablokován."
+    exit 1
+fi
+
+signers_file="${ANSIBLE_PULL_ALLOWED_SIGNERS:-${repo_dir}/files/allowed_signers}"
+if ! git -C "$repo_dir" -c gpg.format=ssh -c "gpg.ssh.allowedSignersFile=${signers_file}" verify-commit "$sha" >/dev/null 2>&1; then
+    if [[ "$last_sha" == "$sha" ]] && (( now - last_time < 3600 )); then
+        attempts=$((attempts + 1))
+    else
+        attempts=1
+    fi
+    install -d -m 0750 "$state_dir"
+    printf '%s %s %s\n' "$sha" "$now" "$attempts" > "$attempt_file"
+    chmod 0600 "$attempt_file"
+    failure "Commit ${sha} na větvi ${branch} nemá platný podpis povoleného správce; ansible-pull nebyl spuštěn."
+    exit 1
+fi
+
+install -d -m 0750 "$state_dir"
+printf '%s\n' "$sha" > "$state_dir/last-verified-sha"
+chmod 0600 "$state_dir/last-verified-sha"
+rm -f "$attempt_file"
+if ! ansible-pull -U "$repository" -C "$sha" -d "$repo_dir" -i localhost, local.yml; then
+    failure "Ověřený commit ${sha} byl stažen, ale ansible-pull jej nedokázal použít."
+    exit 1
+fi

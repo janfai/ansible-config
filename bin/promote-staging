@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+push=0
+if [[ "${1:-}" == "--push" && "$#" -eq 1 ]]; then
+    push=1
+elif [[ "$#" -ne 0 ]]; then
+    printf 'Použití: %s [--push]\n' "$0" >&2
+    exit 2
+fi
+
+git rev-parse --is-inside-work-tree >/dev/null
+current_branch="$(git branch --show-current)"
+if [[ "$current_branch" != staging ]]; then
+    printf 'Spusťte skript na větvi staging (aktuální: %s).\n' "$current_branch" >&2
+    exit 1
+fi
+
+main_sha="$(git rev-parse main^{commit})"
+staging_sha="$(git rev-parse staging^{commit})"
+if ! git merge-base --is-ancestor "$main_sha" "$staging_sha"; then
+    printf '%s\n' 'staging není potomkem main.' >&2
+    exit 1
+fi
+
+if ! git -c gpg.format=ssh -c gpg.ssh.allowedSignersFile=files/allowed_signers verify-commit "$staging_sha" >/dev/null; then
+    printf '%s\n' 'HEAD staging nemá platný podpis povoleného správce.' >&2
+    exit 1
+fi
+
+if [[ -n "${VM_MINT_PULL_STATUS_FILE:-}" && -f "$VM_MINT_PULL_STATUS_FILE" ]]; then
+    read -r status status_sha < "$VM_MINT_PULL_STATUS_FILE"
+    if [[ "$status" != success || "$status_sha" != "$staging_sha" ]]; then
+        printf '%s\n' 'Stavový soubor vm-mint nepotvrzuje úspěšný pull tohoto HEAD.' >&2
+        exit 1
+    fi
+fi
+
+if (( push )); then
+    git push origin staging:staging
+    git push origin staging:main
+else
+    printf 'Kontroly prošly pro %s. Pro publikaci fast-forwardu spusťte znovu s --push.\n' "$staging_sha"
+fi

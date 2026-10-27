@@ -1,6 +1,8 @@
 # Správa stanic Linux Mint
 
-Každá stanice si jednou denně stáhne nakonfigurovanou větev pomocí systemd timeru a spustí `local.yml` jako root. Identitu čte z `/etc/ansible/station-id`; proměnné stanice jsou v `host_vars/` a citlivé údaje v samostatném SOPS souboru.
+Vydávání změn přes kanárkovou větev popisuje [postup stagingu](docs/staging.md).
+
+Každá stanice každých 15 minut stáhne nakonfigurovanou větev pomocí systemd timeru a spustí `local.yml` jako root. Před spuštěním se ověří SSH podpis commitu proti `files/allowed_signers`. Identitu čte z `/etc/ansible/station-id`; proměnné stanice jsou v `host_vars/` a citlivé údaje v samostatném SOPS souboru.
 
 ## Založení stanice
 
@@ -12,7 +14,7 @@ sudo bash /tmp/bootstrap.sh lada main
 rm -f /tmp/bootstrap.sh
 ```
 
-Druhý parametr bootstrapu určuje větev (`main` nebo `next`); při vynechání se použije `main`.
+Druhý parametr bootstrapu určuje počáteční větev; při vynechání se použije `main`. Větev po instalaci určuje `ansible_pull_branch` v `host_vars/<id>.yml`.
 
 Použitelná ID jsou `lada`, `milan`, `jitka`, `lucie`, `vlada`, `alan` a `vm-mint`. Skript nainstaluje potřebné balíčky, připne SOPS ke konkrétní verzi a kontrolnímu součtu, vytvoří klíč age a zapne časovač. Veřejný klíč age vypíše pro doplnění do `.sops.yaml`.
 

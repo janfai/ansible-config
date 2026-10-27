@@ -12,19 +12,20 @@ case "${station_id}" in
     lada|milan|jitka|lucie|vlada|alan|vm-mint) ;;
     *) printf '%s\n' 'Použití: bootstrap.sh {lada|milan|jitka|lucie|vlada|alan|vm-mint} [main|next]' >&2; exit 2 ;;
 esac
-case "${branch}" in
-    main|next) ;;
-    *) printf '%s\n' 'Větev musí být main nebo next.' >&2; exit 2 ;;
-esac
+if ! git check-ref-format --branch "${branch}" >/dev/null; then
+    printf '%s\n' 'Neplatný název větve.' >&2
+    exit 2
+fi
 
 sops_version='3.13.3'
 sops_sha256='e5bec3346a873ae91d871550f3e698c1aad962aff462a080e40f25fde17fef6b'
-repository='https://github.com/janfai/ansible-config.git'
+repository="${ANSIBLE_CONFIG_REPOSITORY:-ssh://fleet-config@vps.faix.cz:10022/srv/fleet-config/ansible-config.git}"
 
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y ansible git age ca-certificates curl
 install -d -o root -g root -m 0750 /etc/ansible
 install -d -o root -g root -m 0750 /var/lib/ansible-pull
+install -d -o root -g root -m 0750 /var/lib/ansible-pull-state
 
 if [[ -e /etc/ansible/station-id ]] && [[ "$(cat /etc/ansible/station-id)" != "${station_id}" ]]; then
     printf '%s\n' 'Soubor station-id již obsahuje jiné ID.' >&2
@@ -50,8 +51,13 @@ trap - EXIT
 if [[ ! -d /var/lib/ansible-pull/.git ]]; then
     git clone --branch "${branch}" --depth 1 "${repository}" /var/lib/ansible-pull
 fi
+install -o root -g root -m 0755 /var/lib/ansible-pull/bin/ansible-pull-verified /usr/local/sbin/ansible-pull-verified
+install -o root -g root -m 0750 /var/lib/ansible-pull/roles/reporting/files/ansible-pull-failed /usr/local/sbin/ansible-pull-failed
+install -o root -g root -m 0750 /var/lib/ansible-pull/roles/reporting/files/ansible-pull-succeeded /usr/local/sbin/ansible-pull-succeeded
 install -o root -g root -m 0644 /var/lib/ansible-pull/systemd/ansible-pull.service /etc/systemd/system/ansible-pull.service
-printf 'ANSIBLE_CONFIG_BRANCH=%s\n' "${branch}" > /etc/ansible/ansible-pull.env
+install -o root -g root -m 0644 /var/lib/ansible-pull/systemd/ansible-pull-failure.service /etc/systemd/system/ansible-pull-failure.service
+install -d -o root -g root -m 0750 /var/lib/stanice
+printf 'ANSIBLE_CONFIG_BRANCH=%s\nANSIBLE_CONFIG_REPOSITORY=%s\n' "${branch}" "${repository}" > /etc/ansible/ansible-pull.env
 chown root:root /etc/ansible/ansible-pull.env
 chmod 0644 /etc/ansible/ansible-pull.env
 install -o root -g root -m 0644 /var/lib/ansible-pull/systemd/ansible-pull.timer /etc/systemd/system/ansible-pull.timer
