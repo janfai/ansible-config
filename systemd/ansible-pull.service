@@ -2,13 +2,12 @@
 Description=Stažení a použití konfigurace stanice
 Wants=network-online.target
 After=network-online.target
-OnFailure=ansible-pull-failure.service
 
 [Service]
 Type=oneshot
 Environment=SOPS_AGE_KEY_FILE=/etc/ansible/age.key
 EnvironmentFile=/etc/ansible/ansible-pull.env
 WorkingDirectory=/var/lib/ansible-pull
-ExecStart=/usr/bin/ansible-pull -U ${ANSIBLE_CONFIG_REPOSITORY} -C ${ANSIBLE_CONFIG_BRANCH} -d /var/lib/ansible-pull -i localhost, local.yml
+ExecStart=/usr/local/sbin/ansible-pull-verified
 ExecStartPost=-/usr/local/sbin/ansible-pull-succeeded
 User=root

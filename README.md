@@ -1,6 +1,8 @@
 # Správa stanic Linux Mint
 
-Každá stanice každých 15 minut zkusí stáhnout nakonfigurovanou větev pomocí systemd timeru a spustí `local.yml` jako root. Identitu čte z `/etc/ansible/station-id`; proměnné stanice jsou v `host_vars/` a citlivé údaje v samostatném SOPS souboru. Git přístup je přes samostatný SSH klíč stanice, který smí pouze číst repozitář.
+Vydávání změn přes kanárkovou větev popisuje [postup stagingu](docs/staging.md).
+
+Každá stanice každých 15 minut stáhne nakonfigurovanou větev, ověří podpis commitu proti `files/allowed_signers` a teprve potom spustí `local.yml` jako root. Identitu čte z `/etc/ansible/station-id`; proměnné stanice jsou v `host_vars/` a citlivé údaje v samostatném SOPS souboru. Git přístup je přes samostatný SSH klíč stanice, který smí pouze číst repozitář.
 
 ## Založení stanice
 
@@ -12,7 +14,7 @@ Spusťte bootstrap jako root:
 sudo bash ./bootstrap.sh lada main SHA256:<ověřený-fingerprint>
 ```
 
-První parametr je pevné ID stanice. Větev se zadává jako druhý parametr a při vynechání se použije `main`; fingerprint `SHA256:...` je povinný poslední parametr (při výchozí větvi tedy druhý). Bootstrap stáhne host key na portu 10022, ověří fingerprint a zapíše jej do `/etc/ansible/known_hosts`; SSH vyžaduje striktní kontrolu host key. URL lze přepsat proměnnou `ANSIBLE_CONFIG_REPOSITORY`, jejíž výchozí hodnota je `ssh://fleet-config@vps.faix.cz:10022/srv/fleet-config/ansible-config.git`.
+První parametr je pevné ID stanice. Větev se zadává jako druhý parametr a při vynechání se použije `main`; fingerprint `SHA256:...` je povinný poslední parametr (při výchozí větvi tedy druhý). Bootstrap stáhne host key na portu 10022, ověří fingerprint a zapíše jej do `/etc/ansible/known_hosts`; SSH vyžaduje striktní kontrolu host key. Po nasazení větev určuje `ansible_pull_branch` v `host_vars/<id>.yml`, výchozí je `main`. URL lze přepsat proměnnou `ANSIBLE_CONFIG_REPOSITORY`, jejíž výchozí hodnota je `ssh://fleet-config@vps.faix.cz:10022/srv/fleet-config/ansible-config.git`.
 
 Použitelná ID jsou `lada`, `milan`, `jitka`, `lucie`, `vlada`, `alan` a `vm-mint` (testovací stanice `mint_test`). Skript nainstaluje potřebné balíčky, připne SOPS ke konkrétní verzi a kontrolnímu součtu, vytvoří klíč age a bez hesla deploy SSH klíč `/etc/ansible/git_ed25519` s režimem `0600`; zapne časovač. Na konci vypíše age i SSH veřejný klíč.
 

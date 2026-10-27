@@ -39,6 +39,7 @@ if ! git check-ref-format --branch "${branch}" >/dev/null; then
 fi
 install -d -o root -g root -m 0750 /etc/ansible
 install -d -o root -g root -m 0750 /var/lib/ansible-pull
+install -d -o root -g root -m 0750 /var/lib/ansible-pull-state
 
 if [[ ! -s "${git_key}" ]]; then
     ssh-keygen -q -t ed25519 -N '' -C "ansible-${station_id}" -f "${git_key}"
@@ -82,7 +83,12 @@ trap - EXIT
 if [[ ! -d /var/lib/ansible-pull/.git ]]; then
     GIT_SSH_COMMAND="${git_ssh_command}" git clone --branch "${branch}" --depth 1 "${repository}" /var/lib/ansible-pull
 fi
+install -o root -g root -m 0755 /var/lib/ansible-pull/bin/ansible-pull-verified /usr/local/sbin/ansible-pull-verified
+install -o root -g root -m 0750 /var/lib/ansible-pull/roles/reporting/files/ansible-pull-failed /usr/local/sbin/ansible-pull-failed
+install -o root -g root -m 0750 /var/lib/ansible-pull/roles/reporting/files/ansible-pull-succeeded /usr/local/sbin/ansible-pull-succeeded
 install -o root -g root -m 0644 /var/lib/ansible-pull/systemd/ansible-pull.service /etc/systemd/system/ansible-pull.service
+install -o root -g root -m 0644 /var/lib/ansible-pull/systemd/ansible-pull-failure.service /etc/systemd/system/ansible-pull-failure.service
+install -d -o root -g root -m 0750 /var/lib/stanice
 printf 'ANSIBLE_CONFIG_BRANCH=%s\nANSIBLE_CONFIG_REPOSITORY=%s\nGIT_SSH_COMMAND="%s"\n' "${branch}" "${repository}" "${git_ssh_command}" > /etc/ansible/ansible-pull.env
 chown root:root /etc/ansible/ansible-pull.env
 chmod 0644 /etc/ansible/ansible-pull.env

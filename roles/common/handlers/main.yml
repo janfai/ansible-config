@@ -1,4 +1,8 @@
 ---
+- name: Načíst systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
 - name: Vygenerovat české prostředí
   ansible.builtin.command:
     argv:

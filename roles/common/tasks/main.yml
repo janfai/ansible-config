@@ -1,4 +1,21 @@
 ---
+- name: Instalovat ověřovací wrapper ansible-pull
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/bin/ansible-pull-verified"
+    dest: /usr/local/sbin/ansible-pull-verified
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Instalovat podepisování ověřující systemd service
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/systemd/ansible-pull.service"
+    dest: /etc/systemd/system/ansible-pull.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Načíst systemd
+
 - name: Nainstalovat základní balíčky navíc proti čistému Mintu
   ansible.builtin.apt:
     name: "{{ mint_base_packages }}"
