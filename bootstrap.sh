@@ -8,23 +8,55 @@ fi
 
 station_id="${1:-}"
 branch="${2:-main}"
+host_fingerprint=''
+if [[ "${2:-}" == SHA256:* ]] && [[ "$#" -eq 2 ]]; then
+    branch='main'
+    host_fingerprint="$2"
+else
+    host_fingerprint="${3:-}"
+fi
+repository="${ANSIBLE_CONFIG_REPOSITORY:-ssh://fleet-config@vps.faix.cz:10022/srv/fleet-config/ansible-config.git}"
 case "${station_id}" in
     lada|milan|jitka|lucie|vlada|alan|vm-mint) ;;
-    *) printf '%s\n' 'Použití: bootstrap.sh {lada|milan|jitka|lucie|vlada|alan|vm-mint} [main|next]' >&2; exit 2 ;;
+    *) printf '%s\n' 'Použití: bootstrap.sh {lada|milan|jitka|lucie|vlada|alan|vm-mint} [větev] SHA256:otisk' >&2; exit 2 ;;
 esac
-case "${branch}" in
-    main|next) ;;
-    *) printf '%s\n' 'Větev musí být main nebo next.' >&2; exit 2 ;;
-esac
+if [[ ! "${host_fingerprint}" =~ ^SHA256:[A-Za-z0-9+/]{43}$ ]]; then
+    printf '%s\n' 'Předejte ověřený fingerprint host key jako třetí parametr (SHA256:...).' >&2
+    exit 2
+fi
 
 sops_version='3.13.3'
 sops_sha256='e5bec3346a873ae91d871550f3e698c1aad962aff462a080e40f25fde17fef6b'
-repository='https://github.com/janfai/ansible-config.git'
+git_key='/etc/ansible/git_ed25519'
+known_hosts='/etc/ansible/known_hosts'
+git_ssh_command="/usr/bin/ssh -i ${git_key} -o IdentitiesOnly=yes -o UserKnownHostsFile=${known_hosts} -o StrictHostKeyChecking=yes -o BatchMode=yes"
 
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y ansible git age ca-certificates curl
+if ! git check-ref-format --branch "${branch}" >/dev/null; then
+    printf '%s\n' 'Neplatný název větve.' >&2
+    exit 2
+fi
 install -d -o root -g root -m 0750 /etc/ansible
 install -d -o root -g root -m 0750 /var/lib/ansible-pull
+
+if [[ ! -s "${git_key}" ]]; then
+    ssh-keygen -q -t ed25519 -N '' -C "ansible-${station_id}" -f "${git_key}"
+fi
+chown root:root "${git_key}" "${git_key}.pub"
+chmod 0600 "${git_key}"
+chmod 0644 "${git_key}.pub"
+
+known_hosts_tmp="$(mktemp)"
+trap 'rm -f "${known_hosts_tmp}"' EXIT
+/usr/bin/ssh-keyscan -p 10022 -t ed25519 vps.faix.cz > "${known_hosts_tmp}" 2>/dev/null
+if [[ ! -s "${known_hosts_tmp}" ]] || [[ "$(/usr/bin/ssh-keygen -lf "${known_hosts_tmp}" -E sha256 | awk 'NR == 1 {print $2}')" != "${host_fingerprint}" ]]; then
+    printf '%s\n' 'Fingerprint host key VPS nesouhlasí s předanou hodnotou.' >&2
+    exit 1
+fi
+install -o root -g root -m 0644 "${known_hosts_tmp}" "${known_hosts}"
+rm -f "${known_hosts_tmp}"
+trap - EXIT
 
 if [[ -e /etc/ansible/station-id ]] && [[ "$(cat /etc/ansible/station-id)" != "${station_id}" ]]; then
     printf '%s\n' 'Soubor station-id již obsahuje jiné ID.' >&2
@@ -48,10 +80,10 @@ rm -f "${sops_tmp}"
 trap - EXIT
 
 if [[ ! -d /var/lib/ansible-pull/.git ]]; then
-    git clone --branch "${branch}" --depth 1 "${repository}" /var/lib/ansible-pull
+    GIT_SSH_COMMAND="${git_ssh_command}" git clone --branch "${branch}" --depth 1 "${repository}" /var/lib/ansible-pull
 fi
 install -o root -g root -m 0644 /var/lib/ansible-pull/systemd/ansible-pull.service /etc/systemd/system/ansible-pull.service
-printf 'ANSIBLE_CONFIG_BRANCH=%s\n' "${branch}" > /etc/ansible/ansible-pull.env
+printf 'ANSIBLE_CONFIG_BRANCH=%s\nANSIBLE_CONFIG_REPOSITORY=%s\nGIT_SSH_COMMAND="%s"\n' "${branch}" "${repository}" "${git_ssh_command}" > /etc/ansible/ansible-pull.env
 chown root:root /etc/ansible/ansible-pull.env
 chmod 0644 /etc/ansible/ansible-pull.env
 install -o root -g root -m 0644 /var/lib/ansible-pull/systemd/ansible-pull.timer /etc/systemd/system/ansible-pull.timer
@@ -62,3 +94,5 @@ systemctl enable --now ansible-pull.timer
 
 printf 'Veřejný klíč age této stanice: '
 age-keygen -y /etc/ansible/age.key
+printf 'Veřejný Git klíč pro fleet-enroll (%s):\n' "${station_id}"
+cat "${git_key}.pub"

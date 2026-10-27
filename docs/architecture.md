@@ -2,13 +2,13 @@
 
 ## Spuštění
 
-`bootstrap.sh <id> [větev]` se spouští jednou ručně jako root na stanici Linux Mint. Nainstaluje Ansible, Git a age, ověří kontrolní součet připnutého SOPS, založí `/etc/ansible/station-id` a `/etc/ansible/age.key` a aktivuje `ansible-pull.timer`. Větev může být `main` nebo `next`; bez parametru se použije `main`. Timer spustí `ansible-pull` po startu a poté jednou denně; po vypnutí nebo spánku se zmeškaný běh provede po dalším startu.
+`bootstrap.sh <id> [větev] SHA256:<fingerprint>` se spouští jednou ručně jako root na stanici Linux Mint. Nainstaluje Ansible, Git a age, ověří kontrolní součet připnutého SOPS, založí `/etc/ansible/station-id` a `/etc/ansible/age.key`, vygeneruje `/etc/ansible/git_ed25519` a aktivuje `ansible-pull.timer`. Větev je při vynechání `main`; repozitář lze přepsat proměnnou `ANSIBLE_CONFIG_REPOSITORY`. Bootstrap stáhne host key `vps.faix.cz:10022`, ověří jej proti předanému SHA-256 fingerprintu a uloží do `/etc/ansible/known_hosts`.
 
-Systemd služba čeká na `network-online.target` a volá `ansible-pull -U https://github.com/janfai/ansible-config.git -C <větev> -i localhost, local.yml`. Soukromý age klíč je dostupný pouze rootovi.
+První clone i systemd služba používají stejné `GIT_SSH_COMMAND` s deploy klíčem, `known_hosts` a `StrictHostKeyChecking=yes`. `/etc/ansible/ansible-pull.env` určuje URL repozitáře a větev. Timer spouští pull po 3 minutách od startu a následně každých 15 minut, s náhodným posunem do 2 minut a persistentním během po výpadku. Selhání služby zpracovává `ansible-pull-failure.service`. Soukromé age i Git klíče jsou dostupné pouze rootovi.
 
 ## Proměnné a tajemství
 
-`local.yml` načte `group_vars/mint.yml`, `host_vars/<id>.yml` a pomocí `community.sops.sops` rozšifruje `secrets/<id>.enc.yaml`. Povolená ID jsou `lada`, `milan`, `jitka`, `lucie`, `vlada`, `alan` a `vm-mint`. Veřejné klíče stanic se po bootstrapu doplňují mezi příjemce v `.sops.yaml`; výchozí soubor obsahuje klíč NASu.
+`local.yml` načte `group_vars/mint.yml`, `host_vars/<id>.yml` a pomocí `community.sops.sops` rozšifruje `secrets/<id>.enc.yaml`. Povolená ID jsou `lada`, `milan`, `jitka`, `lucie`, `vlada`, `alan` a `vm-mint` (testovací stanice `mint_test`). Veřejné age klíče stanic se po bootstrapu doplňují mezi příjemce v `.sops.yaml`; veřejné Git klíče se předávají správci VPS a registrují přes `fleet-enroll <id> <pubkey-file>`.
 
 SOPS tajemství obsahují adresu relay serveru, heslo SMTP účtu a adresu uživatele. Konfigurační soubory, dokumentace i názvy stanic v Gitu používají pouze pseudonymy. Tajemství se nikdy nevypisují do protokolu Ansible.
 
