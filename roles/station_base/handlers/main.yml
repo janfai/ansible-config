@@ -1,0 +1,8 @@
+---
+- name: Znovu načíst pravidla udev
+  ansible.builtin.command:
+    argv:
+      - udevadm
+      - control
+      - --reload
+  changed_when: true

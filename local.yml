@@ -96,6 +96,7 @@
       no_log: true
   roles:
     - common
+    - station_base
     - sops_client
     - mail
     - smartd

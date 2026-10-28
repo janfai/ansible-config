@@ -1,0 +1,25 @@
+---
+station_base_conflicting_time_packages:
+  - ntp
+  - chrony
+  - ntpsec
+station_base_sysv_links_glob: '[SK][0-9][0-9]ntp'
+station_base_sysv_rc_dirs:
+  - /etc/rc0.d
+  - /etc/rc1.d
+  - /etc/rc2.d
+  - /etc/rc3.d
+  - /etc/rc4.d
+  - /etc/rc5.d
+  - /etc/rc6.d
+  - /etc/rcS.d
+station_base_legacy_udev_rules:
+  - /etc/udev/rules.d/40-libsane.rules
+station_base_backup_dir: /var/backups/station-base
+station_base_services:
+  - {package: ufw, unit: ufw.service}
+  - {package: fail2ban, unit: fail2ban.service}
+  - {package: postfix, unit: postfix.service}
+  - {package: unattended-upgrades, unit: unattended-upgrades.service}
+  - {package: atop, unit: atop.service}
+  - {package: cups, unit: cups.service}

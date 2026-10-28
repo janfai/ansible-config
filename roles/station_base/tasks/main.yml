@@ -1,0 +1,155 @@
+---
+- name: Zjistit stav balíčků časových služeb
+  ansible.builtin.command:
+    argv:
+      - dpkg-query
+      - -W
+      - -f
+      - '${db:Status-Abbrev}'
+      - "{{ item }}"
+  loop: "{{ station_base_conflicting_time_packages }}"
+  register: station_base_time_package_state
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Odstranit konkurenční časové služby včetně konfigurace
+  ansible.builtin.apt:
+    name: "{{ item.item }}"
+    state: absent
+    purge: true
+  loop: "{{ station_base_time_package_state.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: item.rc == 0 and (item.stdout | trim) is match('^(ii|rc|hi|ri)')
+
+- name: Zajistit systemd-timesyncd
+  ansible.builtin.apt:
+    name: systemd-timesyncd
+    state: present
+
+- name: Zapnout a spustit systemd-timesyncd
+  ansible.builtin.systemd:
+    name: systemd-timesyncd.service
+    enabled: true
+    state: started
+
+- name: Zjistit jednotku casper-md5check
+  ansible.builtin.stat:
+    path: /usr/lib/systemd/system/casper-md5check.service
+  register: station_base_casper_unit
+
+- name: Zakázat kontrolu Live ISO na nainstalované stanici
+  ansible.builtin.systemd:
+    name: casper-md5check.service
+    enabled: false
+    masked: true
+  when: station_base_casper_unit.stat.exists
+
+- name: Najít opuštěné SysV odkazy po ntp
+  ansible.builtin.command:
+    argv: "{{ ['find'] + station_base_sysv_rc_dirs + ['-maxdepth', '1', '-xtype', 'l', '-name', station_base_sysv_links_glob] }}"
+  register: station_base_orphan_links
+  changed_when: false
+  check_mode: false
+
+- name: Odstranit opuštěné SysV odkazy po ntp
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop: "{{ station_base_orphan_links.stdout_lines }}"
+
+- name: Zjistit nebalíčková stará pravidla udev
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop: "{{ station_base_legacy_udev_rules }}"
+  register: station_base_udev_stat
+
+- name: Zjistit, zda pravidlo udev patří balíčku
+  ansible.builtin.command:
+    argv:
+      - dpkg
+      - -S
+      - "{{ item.item }}"
+  loop: "{{ station_base_udev_stat.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  register: station_base_udev_owner
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: item.stat.exists
+
+- name: Vytvořit adresář záloh pravidel udev
+  ansible.builtin.file:
+    path: "{{ station_base_backup_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+  when: station_base_udev_owner.results | selectattr('rc', 'defined') | selectattr('rc', 'ne', 0) | list | length > 0
+
+- name: Zálohovat nebalíčková stará pravidla udev
+  ansible.builtin.copy:
+    src: "{{ item.item.item }}"
+    dest: "{{ station_base_backup_dir }}/{{ item.item.item | basename }}"
+    remote_src: true
+    owner: root
+    group: root
+    mode: '0600'
+    force: false
+  loop: "{{ station_base_udev_owner.results }}"
+  loop_control:
+    label: "{{ item.item.item | default('') }}"
+  when: item.rc is defined and item.rc != 0
+
+- name: Odsunout nebalíčková stará pravidla udev
+  ansible.builtin.file:
+    path: "{{ item.item.item }}"
+    state: absent
+  loop: "{{ station_base_udev_owner.results }}"
+  loop_control:
+    label: "{{ item.item.item | default('') }}"
+  when: item.rc is defined and item.rc != 0
+  notify: Znovu načíst pravidla udev
+
+- name: Zjistit nainstalované balíčky stanice
+  ansible.builtin.package_facts:
+    manager: auto
+
+- name: Zjistit zapnutí SSH přes socket nebo službu
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - is-enabled
+      - ssh.socket
+      - ssh.service
+  register: station_base_ssh_enabled
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: "'openssh-server' in ansible_facts.packages"
+
+- name: Zapnout SSH, pokud není zapnuté ani socketem
+  ansible.builtin.systemd:
+    name: ssh.service
+    enabled: true
+  when:
+    - "'openssh-server' in ansible_facts.packages"
+    - "'enabled' not in station_base_ssh_enabled.stdout_lines"
+
+- name: Zajistit běh SSH
+  ansible.builtin.systemd:
+    name: ssh.service
+    state: started
+  when: "'openssh-server' in ansible_facts.packages"
+
+- name: Zajistit služby nainstalovaných balíčků
+  ansible.builtin.systemd:
+    name: "{{ item.unit }}"
+    enabled: true
+    state: started
+  loop: "{{ station_base_services }}"
+  loop_control:
+    label: "{{ item.unit }}"
+  when: item.package in ansible_facts.packages
