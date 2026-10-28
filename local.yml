@@ -97,6 +97,8 @@
   roles:
     - common
     - station_base
+    - role: teamviewer
+      teamviewer_enabled: "{{ station_config.teamviewer_enabled | default(false) }}"
     - sops_client
     - mail
     - smartd

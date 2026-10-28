@@ -20,9 +20,8 @@ class StationBase(unittest.TestCase):
 
     def test_conflicting_time_services_are_purged_and_timesyncd_ensured(self):
         self.assertEqual(self.defaults["station_base_conflicting_time_packages"], ["ntp", "chrony", "ntpsec"])
-        purge = [t for t in self.tasks if t.get("ansible.builtin.apt", {}).get("state") == "absent"]
-        self.assertEqual(len(purge), 1)
-        self.assertTrue(purge[0]["ansible.builtin.apt"]["purge"])
+        purge = next(t for t in self.tasks if t.get("name") == "Odstranit konkurenční časové služby včetně konfigurace")
+        self.assertTrue(purge["ansible.builtin.apt"]["purge"])
         units = [t["ansible.builtin.systemd"] for t in self.tasks if "ansible.builtin.systemd" in t]
         timesyncd = [u for u in units if u["name"] == "systemd-timesyncd.service"][0]
         self.assertTrue(timesyncd["enabled"])
@@ -45,12 +44,23 @@ class StationBase(unittest.TestCase):
 
     def test_services_do_not_install_packages_or_touch_third_party(self):
         text = (ROLE / "tasks/main.yml").read_text()
-        for forbidden in ("teamviewer", "openvpn", "timeshift", "skype"):
+        for forbidden in ("timeshift", "skype"):
             self.assertNotIn(forbidden, text)
         for entry in self.defaults["station_base_services"]:
             self.assertNotIn("cups-browsed", entry["unit"])
         installs = [t for t in self.tasks if t.get("ansible.builtin.apt", {}).get("state") == "present"]
         self.assertEqual([t["ansible.builtin.apt"]["name"] for t in installs], ["systemd-timesyncd"])
+
+    def test_optional_removal_is_guarded_and_default_is_empty(self):
+        self.assertEqual(self.defaults["station_base_absent_packages"], [])
+        safety = next(t for t in self.tasks if t.get("name") == "Prověřit bezpečné odstranění volitelných balíčků")
+        remove = next(t for t in self.tasks if t.get("name") == "Odstranit volitelné balíčky bez aktivní konfigurace OpenVPN")
+        self.assertFalse(safety["check_mode"])
+        self.assertEqual(remove["ansible.builtin.apt"]["state"], "absent")
+        self.assertTrue(remove["ansible.builtin.apt"]["purge"])
+        self.assertTrue(remove["ansible.builtin.apt"]["autoremove"])
+        self.assertEqual(remove["when"][1:], ["'conf=' in station_base_openvpn_safety.stdout_lines", "'vpn=no' in station_base_openvpn_safety.stdout_lines", "'process=no' in station_base_openvpn_safety.stdout_lines"])
+        self.assertNotIn("network-manager'", remove["ansible.builtin.apt"]["name"])
 
     def test_resume_is_owned_only_by_common(self):
         self.assertNotIn("RESUME", (ROLE / "tasks/main.yml").read_text())

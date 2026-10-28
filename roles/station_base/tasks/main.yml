@@ -153,3 +153,57 @@
   loop_control:
     label: "{{ item.unit }}"
   when: item.package in ansible_facts.packages
+
+- name: Prověřit bezpečné odstranění volitelných balíčků
+  ansible.builtin.command:
+    argv:
+      - bash
+      - -c
+      - |
+        set -o pipefail
+        config_file=
+        for directory in /etc/openvpn/client /etc/openvpn/server; do
+          if [ -d "$directory" ]; then
+            config_file=$(find "$directory" -type f -name '*.conf' -print -quit) || exit 2
+            if [ -n "$config_file" ]; then break; fi
+          fi
+        done
+        if command -v nmcli >/dev/null 2>&1; then
+          if nmcli -t -f TYPE connection show | grep -Fxq vpn; then vpn=yes; else vpn=no; fi
+        else
+          vpn=unknown
+        fi
+        if command -v pgrep >/dev/null 2>&1; then
+          if pgrep -x openvpn >/dev/null 2>&1; then process=yes; else process=no; fi
+        else
+          process=unknown
+        fi
+        printf 'conf=%s\nvpn=%s\nprocess=%s\n' "$config_file" "$vpn" "$process"
+  register: station_base_openvpn_safety
+  changed_when: false
+  check_mode: false
+  when: station_base_absent_packages | length > 0
+
+- name: Odstranit volitelné balíčky bez aktivní konfigurace OpenVPN
+  ansible.builtin.apt:
+    name: "{{ station_base_absent_packages }}"
+    state: absent
+    purge: true
+    autoremove: true
+  when:
+    - station_base_absent_packages | length > 0
+    - "'conf=' in station_base_openvpn_safety.stdout_lines"
+    - "'vpn=no' in station_base_openvpn_safety.stdout_lines"
+    - "'process=no' in station_base_openvpn_safety.stdout_lines"
+
+- name: Upozornit na vynechané odstranění volitelných balíčků
+  ansible.builtin.debug:
+    msg: >-
+      Balíčky {{ station_base_absent_packages | join(', ') }} nebyly odstraněny:
+      pojistka OpenVPN není splněna ({{ station_base_openvpn_safety.stdout_lines | join('; ') }}).
+  when:
+    - station_base_absent_packages | length > 0
+    - >-
+      'conf=' not in station_base_openvpn_safety.stdout_lines or
+      'vpn=no' not in station_base_openvpn_safety.stdout_lines or
+      'process=no' not in station_base_openvpn_safety.stdout_lines

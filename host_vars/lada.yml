@@ -3,3 +3,8 @@ guardian_enabled: false
 guardian_git_enabled: true
 guardian_provider: codex
 guardian_station_id: lada
+teamviewer_enabled: true
+station_base_absent_packages:
+  - network-manager-openvpn-gnome
+  - network-manager-openvpn
+  - openvpn
