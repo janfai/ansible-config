@@ -23,21 +23,45 @@ if ! git merge-base --is-ancestor "$main_sha" "$staging_sha"; then
     exit 1
 fi
 
-if ! git -c gpg.format=ssh -c gpg.ssh.allowedSignersFile=files/allowed_signers verify-commit "$staging_sha" >/dev/null; then
-    printf '%s\n' 'HEAD staging nemá platný podpis povoleného správce.' >&2
+while IFS= read -r commit_sha; do
+    if ! git -c gpg.format=ssh -c gpg.ssh.allowedSignersFile=files/allowed_signers verify-commit "$commit_sha" >/dev/null 2>&1; then
+        printf 'Commit %s ve staging nemá platný podpis povoleného správce.\n' "$commit_sha" >&2
+        exit 1
+    fi
+done < <(git rev-list --reverse "$main_sha..$staging_sha")
+
+if ! git remote get-url fleet >/dev/null 2>&1 || ! git remote get-url origin >/dev/null 2>&1; then
+    printf '%s\n' 'Očekávané remotes fleet (VPS) a origin (GitHub) musí být nastavené.' >&2
     exit 1
 fi
 
-if [[ -n "${VM_MINT_PULL_STATUS_FILE:-}" && -f "$VM_MINT_PULL_STATUS_FILE" ]]; then
-    read -r status status_sha < "$VM_MINT_PULL_STATUS_FILE"
-    if [[ "$status" != success || "$status_sha" != "$staging_sha" ]]; then
-        printf '%s\n' 'Stavový soubor vm-mint nepotvrzuje úspěšný pull tohoto HEAD.' >&2
+for station in vm-mint vm-mint-b; do
+    case "$station" in
+        vm-mint) status_env=VM_MINT_PULL_STATUS_FILE ;;
+        vm-mint-b) status_env=VM_MINT_B_PULL_STATUS_FILE ;;
+    esac
+    status_path="${!status_env:-}"
+    if (( push )) && [[ -z "$status_path" ]]; then
+        printf 'Před publikací chybí stavový soubor canary %s (%s).\n' "$station" "$status_env" >&2
         exit 1
     fi
-fi
+    if [[ -n "$status_path" ]]; then
+        if [[ ! -f "$status_path" ]]; then
+            printf 'Stavový soubor canary %s neexistuje.\n' "$station" >&2
+            exit 1
+        fi
+        read -r status status_sha < "$status_path"
+        if [[ "$status" != success || "$status_sha" != "$staging_sha" ]]; then
+            printf 'Stavový soubor canary %s nepotvrzuje úspěšný pull tohoto HEAD.\n' "$station" >&2
+            exit 1
+        fi
+    fi
+done
 
 if (( push )); then
+    git push fleet staging:staging
     git push origin staging:staging
+    git push fleet staging:main
     git push origin staging:main
 else
     printf 'Kontroly prošly pro %s. Pro publikaci fast-forwardu spusťte znovu s --push.\n' "$staging_sha"

@@ -1,4 +1,83 @@
 ---
+- name: Read active swap block devices
+  ansible.builtin.command:
+    argv:
+      - awk
+      - 'NR > 1 && substr($1, 1, 5) == "/dev/" { print $1 }'
+      - /proc/swaps
+  register: resume_swap_devices
+  changed_when: false
+
+- name: Read UUIDs of active swap block devices
+  ansible.builtin.command:
+    argv:
+      - blkid
+      - -s
+      - UUID
+      - -o
+      - value
+      - "{{ item }}"
+  loop: "{{ resume_swap_devices.stdout_lines }}"
+  register: resume_swap_uuid_results
+  changed_when: false
+  failed_when: false
+
+- name: Collect active swap UUIDs
+  ansible.builtin.set_fact:
+    resume_active_swap_uuids: >-
+      {{ resume_swap_uuid_results.results
+         | selectattr('rc', 'equalto', 0)
+         | map(attribute='stdout')
+         | reject('equalto', '')
+         | unique
+         | list }}
+  changed_when: false
+
+- name: Check for an existing initramfs resume configuration
+  ansible.builtin.stat:
+    path: /etc/initramfs-tools/conf.d/resume
+  register: resume_configuration
+
+- name: Read the current initramfs resume configuration
+  ansible.builtin.slurp:
+    src: /etc/initramfs-tools/conf.d/resume
+  register: resume_configuration_content
+  when: resume_configuration.stat.exists
+
+- name: Parse configured resume UUIDs and setting presence
+  ansible.builtin.set_fact:
+    resume_configured_uuids: >-
+      {{ (resume_configuration_content.content | b64decode | regex_findall('(?m)^RESUME=UUID=([A-Fa-f0-9-]+)')) }}
+    resume_setting_present: >-
+      {{ (resume_configuration_content.content | b64decode | regex_findall('(?m)^RESUME=')) | length > 0 }}
+  changed_when: false
+  when: resume_configuration.stat.exists
+
+- name: Replace stale initramfs resume UUID with an active swap UUID
+  ansible.builtin.lineinfile:
+    path: /etc/initramfs-tools/conf.d/resume
+    regexp: '^RESUME='
+    line: "RESUME=UUID={{ resume_active_swap_uuids | first }}"
+    owner: root
+    group: root
+    mode: '0644'
+  when:
+    - resume_configuration.stat.exists
+    - resume_setting_present
+    - resume_active_swap_uuids | length > 0
+    - resume_configured_uuids | intersect(resume_active_swap_uuids) | length == 0
+  notify: Regenerate initramfs after resume config change
+
+- name: Remove initramfs resume configuration without an active swap UUID
+  ansible.builtin.file:
+    path: /etc/initramfs-tools/conf.d/resume
+    state: absent
+  when:
+    - resume_configuration.stat.exists
+    - resume_setting_present
+    - resume_active_swap_uuids | length == 0
+  notify: Regenerate initramfs after resume config change
+
 - name: Instalovat ověřovací wrapper ansible-pull
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/bin/ansible-pull-verified"

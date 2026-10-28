@@ -1,0 +1,137 @@
+---
+- name: Nastavit instalační odpovědi Postfixu
+  ansible.builtin.debconf:
+    name: postfix
+    question: "{{ item.question }}"
+    value: "{{ item.value }}"
+    vtype: string
+  loop:
+    - question: postfix/main_mailer_type
+      value: Satellite system
+    - question: postfix/mailname
+      value: "{{ postfix_mailname }}"
+
+- name: Nainstalovat Postfix a kořenové certifikáty
+  ansible.builtin.apt:
+    name:
+      - postfix
+      - ca-certificates
+    state: present
+
+- name: Zapsat přihlašovací údaje k poštovní bráně
+  ansible.builtin.template:
+    src: sasl_passwd.j2
+    dest: /etc/postfix/sasl_passwd
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true
+  notify:
+    - Zkontrolovat konfiguraci Postfixu
+    - Restartovat Postfix
+
+- name: Zjistit čas změny přihlašovacích údajů
+  ansible.builtin.stat:
+    path: /etc/postfix/sasl_passwd
+  register: postfix_sasl_source
+
+- name: Zjistit stav mapy přihlašovacích údajů
+  ansible.builtin.stat:
+    path: /etc/postfix/sasl_passwd.db
+  register: postfix_sasl_map
+
+- name: Založit mapu přihlašovacích údajů
+  ansible.builtin.command:
+    argv:
+      - postmap
+      - /etc/postfix/sasl_passwd
+  changed_when: true
+  when: not postfix_sasl_map.stat.exists or postfix_sasl_map.stat.mtime < postfix_sasl_source.stat.mtime
+  notify:
+    - Zkontrolovat konfiguraci Postfixu
+    - Restartovat Postfix
+
+- name: Omezit čtení mapy přihlašovacích údajů
+  ansible.builtin.file:
+    path: /etc/postfix/sasl_passwd.db
+    owner: root
+    group: root
+    mode: '0600'
+
+- name: Nastavit Postfix pro šifrované odesílání přes bránu
+  ansible.builtin.template:
+    src: main.cf.j2
+    dest: /etc/postfix/main.cf
+    owner: root
+    group: root
+    mode: '0644'
+  notify:
+    - Zkontrolovat konfiguraci Postfixu
+    - Restartovat Postfix
+
+- name: Přesměrovat systémové zprávy na správce a uživatele
+  ansible.builtin.template:
+    src: aliases.j2
+    dest: /etc/aliases
+    owner: root
+    group: root
+    mode: '0644'
+  vars:
+    admin_email: "{{ station_secrets.ADMIN_EMAIL }}"
+    user_email: "{{ station_secrets.USER_EMAIL }}"
+  no_log: true
+  notify:
+    - Znovu načíst aliasy pošty
+    - Zkontrolovat konfiguraci Postfixu
+    - Restartovat Postfix
+
+- name: Zapsat převod odchozích adres na přihlašovací účet
+  ansible.builtin.template:
+    src: generic.j2
+    dest: /etc/postfix/generic
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true
+  notify:
+    - Zkontrolovat konfiguraci Postfixu
+    - Restartovat Postfix
+
+- name: Zjistit čas změny převodu odchozích adres
+  ansible.builtin.stat:
+    path: /etc/postfix/generic
+  register: postfix_generic_source
+
+- name: Zjistit stav mapy převodu odchozích adres
+  ansible.builtin.stat:
+    path: /etc/postfix/generic.db
+  register: postfix_generic_map
+
+- name: Vytvořit mapu převodu odchozích adres
+  ansible.builtin.command:
+    argv:
+      - postmap
+      - /etc/postfix/generic
+  changed_when: true
+  when: not postfix_generic_map.stat.exists or postfix_generic_map.stat.mtime < postfix_generic_source.stat.mtime
+  notify:
+    - Zkontrolovat konfiguraci Postfixu
+    - Restartovat Postfix
+
+- name: Omezit čtení mapy odchozích adres
+  ansible.builtin.file:
+    path: /etc/postfix/generic.db
+    owner: root
+    group: root
+    mode: '0600'
+
+- name: Zapsat název stanice pro poštu
+  ansible.builtin.copy:
+    dest: /etc/mailname
+    content: "{{ postfix_mailname }}\n"
+    owner: root
+    group: root
+    mode: '0644'
+  notify:
+    - Zkontrolovat konfiguraci Postfixu
+    - Restartovat Postfix

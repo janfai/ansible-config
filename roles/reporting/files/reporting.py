@@ -335,6 +335,8 @@ def git_publish(root, timestamp, json_path, md_path):
     return 'odesláno do Git historie'
 
 def send(recipients, subject, body):
+    if str(settings.get('mail_enabled', True)).strip().lower() in {'false', '0', 'no', 'off', ''}:
+        return
     message = email.message.EmailMessage()
     message['To'] = ', '.join(recipients)
     message['Subject'] = f'[{station}] {subject}'

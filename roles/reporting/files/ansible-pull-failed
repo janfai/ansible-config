@@ -14,6 +14,8 @@ state_path.write_text(f'{count}\n')
 state_path.chmod(0o600)
 if count == 3:
     settings = json.loads(Path('/etc/ansible/reporting.json').read_text())
+    if str(settings.get('mail_enabled', True)).strip().lower() in {'false', '0', 'no', 'off', ''}:
+        raise SystemExit(0)
     signature = settings['admin_signature']
     reason_path = Path('/var/lib/stanice/ansible-pull-failure-reason')
     reason = reason_path.read_text().strip() if reason_path.exists() else 'Stažení nebo použití správy selhalo.'

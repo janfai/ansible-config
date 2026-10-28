@@ -1,0 +1,15 @@
+myhostname = {{ station_id }}.stanice.invalid
+mydomain = stanice.invalid
+myorigin = $myhostname
+mydestination = $myhostname, localhost.$mydomain, localhost
+inet_interfaces = loopback-only
+inet_protocols = ipv4
+relayhost =
+smtp_sasl_auth_enable = no
+smtp_sasl_password_maps =
+smtp_generic_maps =
+sender_dependent_relayhost_maps =
+sender_dependent_default_transport_maps =
+transport_maps =
+default_transport = error:5.7.1 Outbound mail is disabled by station policy
+relay_transport = error:5.7.1 Outbound mail is disabled by station policy

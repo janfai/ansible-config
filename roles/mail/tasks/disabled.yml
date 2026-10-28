@@ -1,0 +1,58 @@
+---
+- name: Find an existing Postfix configuration
+  ansible.builtin.stat:
+    path: /etc/postfix/main.cf
+  register: postfix_disabled_config
+
+- name: Disable external delivery through Postfix
+  ansible.builtin.template:
+    src: disabled-main.cf.j2
+    dest: /etc/postfix/main.cf
+    owner: root
+    group: root
+    mode: '0644'
+  register: postfix_disabled_main
+  when: postfix_disabled_config.stat.exists
+
+- name: Remove stored SMTP credentials and sender maps
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/postfix/sasl_passwd
+    - /etc/postfix/sasl_passwd.db
+    - /etc/postfix/generic
+    - /etc/postfix/generic.db
+  when: postfix_disabled_config.stat.exists
+
+- name: Read the disabled Postfix delivery policy
+  ansible.builtin.command:
+    argv:
+      - postconf
+      - -h
+      - "{{ item }}"
+  loop:
+    - relayhost
+    - smtp_sasl_auth_enable
+    - default_transport
+    - relay_transport
+  register: postfix_disabled_policy
+  changed_when: false
+  when: postfix_disabled_config.stat.exists
+
+- name: Verify external delivery and SMTP authentication are disabled
+  ansible.builtin.assert:
+    that:
+      - postfix_disabled_policy.results[0].stdout == ''
+      - postfix_disabled_policy.results[1].stdout == 'no'
+      - postfix_disabled_policy.results[2].stdout is match('^error:5\.7\.1 ')
+      - postfix_disabled_policy.results[3].stdout is match('^error:5\.7\.1 ')
+    fail_msg: Postfix stále může odesílat zprávy přes vnější SMTP server.
+  when: postfix_disabled_config.stat.exists
+
+- name: Restart Postfix after applying the disabled delivery policy
+  ansible.builtin.service:
+    name: postfix
+    state: restarted
+    enabled: true
+  when: postfix_disabled_config.stat.exists and postfix_disabled_main.changed

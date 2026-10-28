@@ -62,6 +62,7 @@
   no_log: true
   vars:
     reporting_settings:
+      mail_enabled: "{{ station_config.mail_enabled | default(true) | bool }}"
       admin_email: "{{ station_secrets.ADMIN_EMAIL }}"
       user_email: "{{ station_secrets.USER_EMAIL }}"
       admin_signature: "{{ station_secrets.ADMIN_SIGNATURE }}"

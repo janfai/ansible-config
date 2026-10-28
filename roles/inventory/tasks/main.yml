@@ -33,4 +33,6 @@
   register: inventory_run
   changed_when: inventory_run.rc == 0
   failed_when: inventory_run.rc not in [0, 10]
-  when: station_config.inventory_enabled | default(false)
+  when: >-
+    station_config.inventory_enabled | default(false) | bool and
+    station_config.mail_enabled | default(true) | bool

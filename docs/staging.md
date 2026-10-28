@@ -11,13 +11,15 @@ git config --local commit.gpgsign true
 git config --local gpg.ssh.allowedSignersFile files/allowed_signers
 ```
 
+Stanice stahují přes `ANSIBLE_CONFIG_REPOSITORY` z `/etc/ansible/ansible-pull.env`. Bootstrap nastavuje výchozí repozitář na VPS (`fleet`); `origin` je GitHub pro druhou kopii. Promotování pouze na GitHub proto nestačí pro stanice.
+
 ## Postup vydání
 
 1. Proveďte změnu, spusťte kontroly a commit podepište Janovým SSH podpisovým klíčem.
-2. Pushněte změnu do větve `staging`.
+2. Pushněte změnu do větve `staging` na VPS (`fleet`); canary stanice tuto větev stahují.
 3. Počkejte na úspěšný pull na `vm-mint` a ověřte výsledek na testovací stanici.
 4. Fast-forwardněte `main` na ověřený commit ze `staging`.
 
-Skript `bin/promote-staging` ověří, že lokální `staging` navazuje na `main` a jeho HEAD má platný SSH podpis. Pokud je nastaven `VM_MINT_PULL_STATUS_FILE` a soubor existuje, očekává v něm `success <sha>` pro přesný HEAD. Bez dostupného stavového souboru vyžaduje pouze podpis. Samotný skript na žádný stroj nepřistupuje.
+Skript `bin/promote-staging` ověří, že lokální `staging` navazuje na `main`, všechny commity nad `main` mají platný SSH podpis a jsou nastavené oba remotes `fleet` (VPS) a `origin` (GitHub). Pro `--push` vyžaduje `VM_MINT_PULL_STATUS_FILE` i `VM_MINT_B_PULL_STATUS_FILE`; oba soubory musí obsahovat `success <sha>` pro přesný HEAD staging. Samotný skript na žádný stroj nepřistupuje.
 
-Bez přepínače `--push` skript pouze provede kontroly. S `--push` nejprve pushne `staging` a potom provede fast-forward push `staging` do `main`; nepoužívá force push.
+Bez přepínače `--push` skript pouze provede kontroly. S `--push` nejprve aktualizuje `staging` na VPS i GitHubu, potom fast-forwardem aktualizuje `main` na obou remotes. Nepoužívá force push; pokud vzdálená větev není fast-forwardovatelná, push selže a skript nepřepisuje její historii.
