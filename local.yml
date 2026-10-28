@@ -96,7 +96,8 @@
       no_log: true
   roles:
     - common
-    - station_base
+    - role: station_base
+      station_base_absent_packages: "{{ station_config.station_base_absent_packages | default([]) }}"
     - role: teamviewer
       teamviewer_enabled: "{{ station_config.teamviewer_enabled | default(false) }}"
     - sops_client

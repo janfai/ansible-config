@@ -18,6 +18,14 @@ class StationBase(unittest.TestCase):
         roles = [r if isinstance(r, str) else r["role"] for r in playbook[0]["roles"]]
         self.assertEqual(roles.index("station_base"), roles.index("common") + 1)
 
+    def test_absent_packages_are_passed_from_station_config(self):
+        playbook = yaml.safe_load((BASE / "local.yml").read_text())
+        role = next(r for r in playbook[0]["roles"] if not isinstance(r, str) and r["role"] == "station_base")
+        self.assertIn("station_config.station_base_absent_packages", role["station_base_absent_packages"])
+        lada = yaml.safe_load((BASE / "host_vars/lada.yml").read_text())
+        for package in ("openvpn", "virtualbox", "virtualbox-qt", "virtualbox-dkms"):
+            self.assertIn(package, lada["station_base_absent_packages"])
+
     def test_conflicting_time_services_are_purged_and_timesyncd_ensured(self):
         self.assertEqual(self.defaults["station_base_conflicting_time_packages"], ["ntp", "chrony", "ntpsec"])
         purge = next(t for t in self.tasks if t.get("name") == "Odstranit konkurenční časové služby včetně konfigurace")
