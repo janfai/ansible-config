@@ -14,6 +14,11 @@ class TeamViewer(unittest.TestCase):
         repo = next(t["ansible.builtin.copy"] for t in tasks if "ansible.builtin.copy" in t)
         self.assertIn("signed-by=/usr/share/keyrings/teamviewer-keyring.gpg", repo["content"])
         self.assertIn("/deb stable main", repo["content"])
+        repo_task = next(t for t in tasks if "teamviewer.list" in t.get("ansible.builtin.copy", {}).get("dest", ""))
+        self.assertEqual(repo_task["register"], "teamviewer_repository")
+        cache_task = next(t for t in tasks if t.get("name") == "Obnovit indexy po změně repozitáře TeamVieweru")
+        self.assertIn("teamviewer_repository.changed", cache_task["when"])
+        self.assertIn("not ansible_check_mode", cache_task["when"])
         package_task = next(t for t in tasks if t.get("ansible.builtin.apt", {}).get("name") == "teamviewer")
         package = package_task["ansible.builtin.apt"]
         self.assertEqual(package, {"name": "teamviewer", "state": "latest", "update_cache": True, "cache_valid_time": 3600})
