@@ -465,6 +465,8 @@ def agent_environment(workdir, provider, task=None):
     env["HOME"] = home
     env["USER"] = "guardian-agent"
     env["LOGNAME"] = "guardian-agent"
+    if provider == "codex":
+        env["PATH"] = f"/var/lib/upgrade-guardian/agent-home/.local/bin:{env.get('PATH', '')}"
     preexec = None
     if os.environ.get("UPGRADE_GUARDIAN_TESTING") == "1":
         if provider == "codex":
