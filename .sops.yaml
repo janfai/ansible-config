@@ -6,9 +6,15 @@ creation_rules:
   - path_regex: '^host_vars/lada\.sops\.yaml$'
     age: >-
       age1wvl3m4stf3rccpt634jlvyyqlqaqexnq39egzxg7870hexehz37syw7ffx,age1z0c4ha97umqy9ted6h3s5z4c3ap598urhl4fj9pwjw3umg2a0ygqgf076h
-  - path_regex: secrets/.*\.enc\.yaml$
+  - path_regex: '^secrets/vm-mint-b\.enc\.yaml$'
+    age: >-
+      age1wvl3m4stf3rccpt634jlvyyqlqaqexnq39egzxg7870hexehz37syw7ffx,age1k7qewpknga3cnc3e93paz7eteqn8pgcr495u8e0fucelmj2f4vpsw0sy9e
+  - path_regex: '^host_vars/vm-mint-b\.sops\.yaml$'
+    age: >-
+      age1wvl3m4stf3rccpt634jlvyyqlqaqexnq39egzxg7870hexehz37syw7ffx,age1k7qewpknga3cnc3e93paz7eteqn8pgcr495u8e0fucelmj2f4vpsw0sy9e
+  - path_regex: '^secrets/vm-mint\.enc\.yaml$'
     age: >-
       age1wvl3m4stf3rccpt634jlvyyqlqaqexnq39egzxg7870hexehz37syw7ffx,age1cglhfe8cd737jr3v79w0n3y5c9f9gw55ser4hwtmj2fz9fe5g53s59qqat
-  - path_regex: host_vars/.*\.sops\.yaml$
+  - path_regex: '^host_vars/vm-mint\.sops\.yaml$'
     age: >-
       age1wvl3m4stf3rccpt634jlvyyqlqaqexnq39egzxg7870hexehz37syw7ffx,age1cglhfe8cd737jr3v79w0n3y5c9f9gw55ser4hwtmj2fz9fe5g53s59qqat

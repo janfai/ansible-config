@@ -5,22 +5,22 @@ sops:
     age:
         - enc: |
             -----BEGIN AGE ENCRYPTED FILE-----
-            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBCSnpRNTBaZHZYYjlIaEwv
-            cUdUTW51b0YxVTZrRkxJR3pzK3NNUTdSckVvCkU0dlBkd3UrMkEzcW9YNGpjVFhm
-            SXhHbVZOdThJRWd3d1B6UXMwZTFoM28KLS0tIC9XbENqMjNPcFJQa1FRZnJPZVVS
-            T2MwSVNFc3Y1U0Q2TW9ROHZGUm9Rdm8KxjgBuiCI0ZABJyT+r2grsIc3xPK6pA/b
-            ektJY/lPzX5bU9DG8nz13dQCFmDxOqXTokTNuoeOK94gbu3bFWRhkg==
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBOZXZZTkVWNW5veFJITG13
+            eXZhT2VhNmtIK29jUFNwcjNYN2NqS2xmRFJRCmhRQjc1T3dmSC9uZmNMaVlpNzlM
+            Wnl2Q1A5ajlMUHFiN0xjMXp6L3dhQlkKLS0tIHNjTlVQNVhUSWJIVDdwYklSNXlt
+            SFFLTVpCRTllUUxFVW5ZYS9zOUllalEKl+C2GB644Cmoi3tvTLqEfNzmhTnzWNzK
+            0NS0dmPTV/91yPMT5OX2IueF6s/kQtoIN9tquvBZsHk6MzDx1Kl4jg==
             -----END AGE ENCRYPTED FILE-----
           recipient: age1wvl3m4stf3rccpt634jlvyyqlqaqexnq39egzxg7870hexehz37syw7ffx
         - enc: |
             -----BEGIN AGE ENCRYPTED FILE-----
-            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBZeHBueFE2M21QUlF4eUJ3
-            VWszQzBpRGM3TmhGby9Uakc2WTBvU25zQVhjClVSeUZEdGpTd0ROcHFRc2EwMngw
-            eDhoVUZYUHVPQm1BZ2NIN0JoV3BBN0kKLS0tIGVCRjdjMHhQVWdRTFlVVkNLaEVR
-            UnpFSDhWN1Q1K2ZIMkdCSEdlV2g1alkKJ9MoRhg8UwL1KDoXP02+SITCvt9x4ZKP
-            cnzPQtu3OhZ+16jclqwf9J1Vu1B2FrBeI4ZAj0S1cZWF3ZATPAQemQ==
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBjNTFQNEpZWDNGN0o0cDk3
+            VmtNK0VKaFo5LzZzbnZRbU1FQXcwSjRJSFgwCkVQYkVHS3JkS0U5R1lBVHRRWDdr
+            a1Q2eGMxWjZOMHBRd2VpR2FLM0NOOGMKLS0tIFlxbWR3WXdFWUZ5K3pDak5IaWU1
+            a2lqR29KRSs2N3c2MSsrQ3czQkgrd2MK5z21//JVdwuvG4cw9g3c9ZvMzkYjUJD7
+            bt63XkSiwHrBj91kCYIluFzfcsSmwMFD9rWmaZzSMnmPIigRoA9Tzg==
             -----END AGE ENCRYPTED FILE-----
-          recipient: age1cglhfe8cd737jr3v79w0n3y5c9f9gw55ser4hwtmj2fz9fe5g53s59qqat
+          recipient: age1k7qewpknga3cnc3e93paz7eteqn8pgcr495u8e0fucelmj2f4vpsw0sy9e
     lastmodified: "2026-10-28T18:11:00Z"
     mac: ENC[AES256_GCM,data:BNvGJhT8kkhPzFtUFUnt3dWD44rXAtN/IXkL6ijJZJvq9sYhGIggxsIt0A5ne6WNS0ceJaWIERnkNqDvJMbgRZ2fHeNYa7C3jiNbhhcbb9i1xk6qfWoh4V/FOiH8yMmdpIVOSCXXUiYBG/lKQ7LfotkMjphskupcFoMaz5XCiJg=,iv:Gxet1u5auICA6sSdf7SoKv/flmrsPtWcDf4xNDCkTbY=,tag:T85LplhoMIJy8PWdUcsjMA==,type:str]
     unencrypted_suffix: _unencrypted
