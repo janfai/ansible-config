@@ -17,7 +17,7 @@
 - name: Ověřit nastavení Guardiana
   ansible.builtin.assert:
     that:
-      - guardian_provider in ['codex', 'claude']
+      - guardian_provider in ['none', 'codex', 'claude']
       - guardian_station_id | length > 0
       - (guardian_relay_url | default(guardian_secrets.relay_url, true)) is match('^https://')
     fail_msg: Nastavení Guardiana je neúplné nebo neplatné.
@@ -50,7 +50,7 @@
     system: true
     create_home: false
     state: present
-  when: guardian_enabled | bool
+  when: guardian_enabled | bool and guardian_provider != 'none'
 
 - name: Vytvořit adresáře Guardiana
   ansible.builtin.file:
@@ -62,14 +62,27 @@
   loop:
     - {path: /opt/upgrade-guardian, owner: root, group: root, mode: '0755'}
     - {path: /etc/upgrade-guardian, owner: root, group: root, mode: '0750'}
-    - {path: /var/lib/upgrade-guardian, owner: guardian-agent, group: guardian-agent, mode: '0700'}
-    - {path: "{{ guardian_home }}", owner: guardian-agent, group: guardian-agent, mode: '0700'}
-    - {path: "{{ guardian_codex_home }}", owner: guardian-agent, group: guardian-agent, mode: '0700'}
+    - path: /var/lib/upgrade-guardian
+      owner: "{{ 'guardian-agent' if guardian_provider != 'none' else 'root' }}"
+      group: "{{ 'guardian-agent' if guardian_provider != 'none' else 'root' }}"
+      mode: '0700'
     - {path: /var/lib/upgrade-guardian/repo, owner: root, group: root, mode: '0755'}
     - {path: /var/lib/upgrade-guardian/repo/tasks/pending, owner: root, group: root, mode: '0755'}
     - {path: /var/lib/upgrade-guardian/repo/results, owner: root, group: root, mode: '0755'}
     - {path: /var/lib/upgrade-guardian/repo/hb, owner: root, group: root, mode: '0755'}
   when: guardian_enabled | bool
+
+- name: Vytvořit domovy agenta
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: guardian-agent
+    group: guardian-agent
+    mode: '0700'
+  loop:
+    - "{{ guardian_home }}"
+    - "{{ guardian_codex_home }}"
+  when: guardian_enabled | bool and guardian_provider != 'none'
 
 - name: Připravit Git mailbox Guardiana
   ansible.builtin.include_tasks: git-mailbox.yml
@@ -135,10 +148,38 @@
       changed_when: false
       failed_when: "guardian_codex_version_check.rc != 0 or '0.164.0' not in guardian_codex_version_check.stdout"
 
+- name: Odstranit Codex CLI pro provider bez Codexu
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ guardian_home }}/.local/bin/codex"
+    - "{{ guardian_codex_home }}"
+  when: guardian_enabled | bool and guardian_provider != 'codex'
+
+- name: Zastavit agentní procesy při provideru none
+  ansible.builtin.command:
+    argv: [pkill, -KILL, -u, guardian-agent]
+  register: guardian_none_kill_result
+  changed_when: guardian_none_kill_result.rc == 0
+  failed_when: false
+  when: guardian_enabled | bool and guardian_provider == 'none'
+
+- name: Odstranit domovy agenta při provideru none
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ guardian_home }}"
+    - "{{ guardian_codex_home }}"
+  when: guardian_enabled | bool and guardian_provider == 'none'
+
 - name: Zapsat veřejný klíč mastera pro ověřování podpisů
   ansible.builtin.copy:
     dest: /etc/upgrade-guardian/allowed_signers
-    content: "{{ guardian_allowed_signers | trim }}\nrouter namespaces=\"guardian-board\" {{ guardian_allowed_signers | regex_search('ssh-ed25519 [A-Za-z0-9+/=]+') }}\n"
+    content: >-
+      {{ guardian_allowed_signers | trim ~ '\nrouter namespaces="guardian-board" ' ~
+         (guardian_allowed_signers | regex_search('ssh-ed25519 [A-Za-z0-9+/=]+')) ~ '\n' }}
     owner: root
     group: root
     mode: '0644'
@@ -215,6 +256,7 @@
     HOME: "{{ guardian_home }}"
     CODEX_HOME: "{{ guardian_codex_home }}"
   no_log: true
+  changed_when: true
   when: not (guardian_enabled | bool) and guardian_retire_codex.stat.exists
 
 - name: Zakázat a zastavit dřívější Guardian
@@ -263,4 +305,4 @@
     name: guardian-agent
     state: absent
     remove: false
-  when: not (guardian_enabled | bool)
+  when: not (guardian_enabled | bool) or guardian_provider == 'none'

@@ -909,7 +909,10 @@ def auth_codex(task):
 
 def dispatch_agent(repo, task, state, signed=False):
     global AGENT_PROCESS, AGENT_COUNT
-    provider = task.get("provider", config().get("agent_provider", "claude"))
+    configured_provider = config().get("agent_provider", "claude")
+    if configured_provider == "none":
+        return "no-agent", {}
+    provider = task.get("provider", configured_provider)
     if provider == "codex":
         return dispatch_codex(repo, task, state, signed)
     if provider != "claude":
@@ -1376,8 +1379,11 @@ def execute(repo, path, task, state, signed=False, conf=None):
         path.unlink(missing_ok=True)
         Path(str(path) + ".sig").unlink(missing_ok=True)
         return False
-    elif kind == "auth" and task.get("provider") == "codex":
-        status, details = auth_codex(task)
+    elif kind == "auth":
+        if config().get("agent_provider") != "none" and task.get("provider", "codex") == "codex":
+            status, details = auth_codex(task)
+        else:
+            status, details = "no-agent", {}
         result(repo, task_id, status, **details)
         path.unlink(missing_ok=True)
         Path(str(path) + ".sig").unlink(missing_ok=True)

@@ -1,1 +1,3 @@
-guardian-master-8cb19c15
+guardian-runtime-6a811ced
+source=~/Work/.worktrees/guardian-activate/bin/guardian
+source_sha256=6a811ced10d24d9ba240e8784e3f9224058e7593fb660d670ba319c448f020c8

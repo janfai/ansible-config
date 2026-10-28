@@ -57,19 +57,29 @@
 
     - name: Nastavit Git origin
       ansible.builtin.command:
-        argv: [git, -C, /var/lib/upgrade-guardian/repo, config, remote.origin.url, 'guardian-git-vps:{{ guardian_git_root }}/guardian-{{ guardian_station_id }}.git']
+        argv:
+          - git
+          - -C
+          - /var/lib/upgrade-guardian/repo
+          - config
+          - remote.origin.url
+          - 'guardian-git-vps:{{ guardian_git_root }}/guardian-{{ guardian_station_id }}.git'
+      changed_when: true
 
     - name: Nastavit fetch refspec
       ansible.builtin.command:
         argv: [git, -C, /var/lib/upgrade-guardian/repo, config, remote.origin.fetch, '+refs/heads/*:refs/remotes/origin/*']
+      changed_when: true
 
     - name: Stáhnout registrovaný mailbox
       ansible.builtin.command:
         argv: [git, -C, /var/lib/upgrade-guardian/repo, fetch, origin, master]
+      changed_when: true
 
     - name: Připojit hlavní větev mailboxu
       ansible.builtin.command:
         argv: [git, -C, /var/lib/upgrade-guardian/repo, checkout, -B, master, origin/master]
+      changed_when: true
 
     - name: Potvrdit inicializaci mailboxu
       ansible.builtin.copy:

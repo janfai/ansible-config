@@ -16,10 +16,11 @@ Příznak a veřejnou konfiguraci nastav pouze v `host_vars/<id>.yml`:
 
 ```yaml
 guardian_enabled: true
-guardian_provider: codex
+guardian_provider: none
 guardian_station_id: <id>
-guardian_relay_url: https://<relay>/guardian
 ```
+
+`none` je výchozí provider pro dočasné systémové úlohy, například upgrade. Role zachová službu, relay, mailbox a podepsané úlohy `cmd`, `upgrade`, `watch`, `ping` a `retire`; neinstaluje Codex, nevytváří účet `guardian-agent` a úlohy `agent` i `auth` vrací `no-agent`. Provider `codex` přidá Codex CLI a izolovaný účet/profil. Provider `claude` používá existující tokenovou cestu.
 
 Vytvoř soubor YAML pouze v RAM nebo zabezpečeném dočasném úložišti s poli `hmac_key` a `allowed_signers`. HMAC hodnota má nejméně 32 znaků; `allowed_signers` obsahuje veřejný klíč OpenSSH s principalem `jan` a namespace `upgrade-guardian`, což odpovídá výchozímu podpisovému ID Guardiana. Zašifruj do cílové cesty přes SOPS, aniž bys hodnoty vypisoval do terminálu nebo logu:
 
