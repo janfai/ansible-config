@@ -81,8 +81,16 @@ rm -f "${sops_tmp}"
 trap - EXIT
 
 if [[ ! -d /var/lib/ansible-pull/.git ]]; then
-    GIT_SSH_COMMAND="${git_ssh_command}" git clone --branch "${branch}" --depth 1 "${repository}" /var/lib/ansible-pull
+    git init /var/lib/ansible-pull
+    git -C /var/lib/ansible-pull remote add origin "${repository}"
+else
+    git -C /var/lib/ansible-pull remote set-url origin "${repository}"
 fi
+GIT_SSH_COMMAND="${git_ssh_command}" git -C /var/lib/ansible-pull fetch --no-tags origin "refs/heads/${branch}:refs/remotes/origin/${branch}"
+verified_sha="$(git -C /var/lib/ansible-pull rev-parse "refs/remotes/origin/${branch}^{commit}")"
+trusted_signers="$(cd "$(dirname "$0")" && pwd)/files/allowed_signers"
+git -C /var/lib/ansible-pull -c gpg.format=ssh -c "gpg.ssh.allowedSignersFile=${trusted_signers}" verify-commit "${verified_sha}"
+git -C /var/lib/ansible-pull checkout --detach "${verified_sha}"
 install -o root -g root -m 0755 /var/lib/ansible-pull/bin/ansible-pull-verified /usr/local/sbin/ansible-pull-verified
 install -o root -g root -m 0750 /var/lib/ansible-pull/roles/reporting/files/ansible-pull-failed /usr/local/sbin/ansible-pull-failed
 install -o root -g root -m 0750 /var/lib/ansible-pull/roles/reporting/files/ansible-pull-succeeded /usr/local/sbin/ansible-pull-succeeded

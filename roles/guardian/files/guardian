@@ -158,6 +158,92 @@ def result(repo, task_id, status, **extra):
     return data
 
 
+def outbox_dir():
+    return VAR / "outbox"
+
+
+def queue_delivery(task_id, data):
+    write_json(outbox_dir() / (str(task_id) + ".json"), data)
+
+
+def mark_delivery(task_id, confirmed, complete=True):
+    path = VAR / "watch-state.json"
+    try:
+        state = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        state = {}
+    pending = state.setdefault("delivery_pending_ids", [])
+    completed = state.setdefault("completed_ids", [])
+    if task_id in pending:
+        pending.remove(task_id)
+    if confirmed and complete and task_id not in completed:
+        completed.append(task_id)
+        state["completed_ids"] = completed[-2048:]
+    if not confirmed and task_id not in pending:
+        pending.append(task_id)
+        state["delivery_pending_ids"] = pending[-2048:]
+    write_json(path, state)
+
+
+def flush_outbox(conf):
+    directory = outbox_dir()
+    if not directory.exists():
+        return 0
+    delivered = 0
+    for path in sorted(directory.glob("*.json")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            response = relay_request(conf, "POST", "ack/result", data)
+            if response and response.get("ok") is True:
+                result_data = data.get("result", {})
+                mark_delivery(str(data.get("task_id", path.stem)), True, result_data.get("status") != "watching")
+                path.unlink()
+                delivered += 1
+        except Exception:
+            break
+    return delivered
+
+
+def flush_outbox_git(repo):
+    directory = outbox_dir()
+    if not directory.exists():
+        return 0
+    delivered = 0
+    for path in sorted(directory.glob("*.json")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            task_id = str(data.get("task_id", path.stem))
+            result_data = data.get("result", {})
+            push(repo, "guardian: result " + task_id)
+            mark_delivery(task_id, True, result_data.get("status") != "watching")
+            path.unlink()
+            delivered += 1
+        except Exception:
+            break
+    return delivered
+
+
+def deliver_result(conf, repo, task_id, data):
+    envelope = {"task_id": task_id, "status": data.get("status", "completed"), "result": data}
+    queue_delivery(task_id, envelope)
+    try:
+        response = relay_request(conf, "POST", "ack/result", envelope) if conf.get("relay_url") else None
+        if response and response.get("ok") is True:
+            mark_delivery(task_id, True, data.get("status") != "watching")
+            (outbox_dir() / (str(task_id) + ".json")).unlink(missing_ok=True)
+            return "relay"
+    except Exception:
+        pass
+    try:
+        push(repo, "guardian: result " + str(task_id))
+        mark_delivery(task_id, True, data.get("status") != "watching")
+        (outbox_dir() / (str(task_id) + ".json")).unlink(missing_ok=True)
+        return "git"
+    except Exception:
+        mark_delivery(task_id, False)
+        return "queued"
+
+
 def remember_completed(repo, task_id, state):
     try:
         status = json.loads((repo / "results" / (task_id + ".json")).read_text(encoding="utf-8")).get("status")
@@ -189,31 +275,91 @@ def acquire_task_lease(directory, task_id, blocking=False):
         return None
 
 
+def acquire_execution_lease(directory, task_id, blocking=False):
+    task = acquire_task_lease(directory, task_id, blocking)
+    if task is None:
+        return None
+    global_lock = acquire_task_lease(directory, ".global-execution", blocking)
+    if global_lock is None:
+        task.close()
+        return None
+    return task, global_lock
+
+
+def task_time_error(task):
+    if not task.get("expires_at"):
+        return "úkolu chybí povinné expires_at"
+    build_year = datetime.fromtimestamp(Path(__file__).stat().st_mtime, timezone.utc).year
+    if not clock_is_sane(datetime.now(timezone.utc).year, build_year):
+        return "hodiny stanice jsou nevěrohodné vůči roku buildu Guardiana"
+    try:
+        expires = datetime.fromisoformat(str(task["expires_at"]).replace("Z", "+00:00"))
+        if expires.tzinfo is None:
+            return "expires_at musí obsahovat časovou zónu"
+        if expires.timestamp() <= time.time():
+            return "podepsaný úkol vypršel"
+    except (ValueError, TypeError, OverflowError):
+        return "neplatné expires_at"
+    return None
+
+
+def clock_is_sane(current_year, build_year):
+    return int(current_year) >= int(build_year) - 1
+
+
 def uninstall(repo, task_id, final):
+    codex_home = Path(config().get("codex_home", str(VAR / "codex-home")))
+    codex = shutil.which("codex")
+    if codex:
+        code, output = run([codex, "logout"], timeout=30, env={**os.environ, "CODEX_HOME": str(codex_home)})
+        final["codex_logout"] = "ok" if code == 0 else "failed: " + trim(output)
+    else:
+        final["codex_logout"] = "codex CLI unavailable"
+    final["manual_action"] = "zbývá ruční revokace relace v účtu"
+    for process in list(AUTH_PROCESSES.values()) + ([AGENT_PROCESS] if AGENT_PROCESS is not None else []):
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=3)
     write_json(repo / "results" / ("final-" + task_id + ".json"), final)
     push(repo, "guardian: final report " + task_id)
     if not NO_SYSTEMD:
         cleanup = Path("/run/upgrade-guardian-retire.sh")
         key = Path(conf_key_path())
-        commands = [
-            "systemctl disable --now upgrade-guardian.service",
-            f"rm -rf {shlex.quote(str(OPT))} {shlex.quote(str(ETC))} {shlex.quote(str(VAR))}",
-            f"rm -f {shlex.quote(str(key))} {shlex.quote(str(key) + '.pub')} /etc/systemd/system/upgrade-guardian.service",
-            "systemctl daemon-reload",
-            f"rm -f {shlex.quote(str(cleanup))}",
-        ]
+        commands = retire_cleanup_commands(OPT, ETC, VAR, key, cleanup, str(config().get("id", "")))
         cleanup.write_text("#!/bin/sh\nset -eu\n" + "\n".join(commands) + "\n", encoding="utf-8")
         cleanup.chmod(0o700)
         code, output = run(["systemd-run", "--unit=upgrade-guardian-retire", "--on-active=5s", "--collect", "/bin/sh", str(cleanup)], timeout=30)
         if code:
             raise RuntimeError("Nelze naplánovat odinstalaci: " + trim(output))
         return
+    key = Path(conf_key_path())
+    ident = str(config().get("id", ""))
     shutil.rmtree(OPT, ignore_errors=True)
     shutil.rmtree(ETC, ignore_errors=True)
     shutil.rmtree(VAR, ignore_errors=True)
-    key = Path(conf_key_path())
     key.unlink(missing_ok=True)
     Path(str(key) + ".pub").unlink(missing_ok=True)
+    for pattern in (f"upgrade-guardian-{ident}*", f"guardian-gate-{ident}"):
+        for path in Path("/tmp").glob(pattern):
+            shutil.rmtree(path, ignore_errors=True) if path.is_dir() else path.unlink(missing_ok=True)
+    if os.environ.get("UPGRADE_GUARDIAN_TESTING") != "1":
+        run(["userdel", "-r", "guardian-agent"], timeout=30)
+
+
+def retire_cleanup_commands(opt, etc, var, key, cleanup, station_id):
+    return [
+            "systemctl disable --now upgrade-guardian.service",
+            f"rm -rf {shlex.quote(str(opt))} {shlex.quote(str(etc))} {shlex.quote(str(var))}",
+            f"rm -f {shlex.quote(str(key))} {shlex.quote(str(key) + '.pub')} /etc/systemd/system/upgrade-guardian.service",
+            "systemctl daemon-reload",
+            f"rm -f {shlex.quote(str(cleanup))}",
+            "userdel -r guardian-agent 2>/dev/null || true",
+            f"rm -rf /tmp/upgrade-guardian-{shlex.quote(str(station_id))}* /tmp/guardian-gate-{shlex.quote(str(station_id))}",
+    ]
 
 
 def conf_key_path():
@@ -228,7 +374,7 @@ def agent_identity():
         return None, str(VAR / "agent-home")
 
 
-def agent_environment(workdir, provider):
+def agent_environment(workdir, provider, task=None):
     env = dict(os.environ)
     agent, home = agent_identity()
     env["HOME"] = home
@@ -248,13 +394,41 @@ def agent_environment(workdir, provider):
             Path(home).chmod(0o700)
             if agent is not None:
                 Path(home).chown(agent.pw_uid, agent.pw_gid)
+        use_root = agent_runs_as_root(provider, task)
         def preexec():
             if provider == "codex":
                 os.umask(0o077)
+            if use_root:
+                return
             os.setgroups([])
             os.setgid(agent.pw_gid)
             os.setuid(agent.pw_uid)
     return env, preexec
+
+
+def agent_runs_as_root(provider, task):
+    scope = (task or {}).get("scope", "")
+    mode = (task or {}).get("mode", "read")
+    return provider == "codex" and ((scope.startswith("home:") and mode in ("read", "act")) or (scope == "full" and mode == "act"))
+
+
+def codex_policy(task):
+    policy = f"Scope úkolu: {task['scope']}; režim: {task.get('mode', 'read')}. Dodrž zadaný scope a pracuj jen se soubory a systémy souvisejícími s úkolem. Nečti ani nevypisuj nesouvisející osobní data. Nikdy nevypisuj hesla, tokeny, klíče ani obsah auth.json. Odpověď vrať přesně v oddílech stav, co_jsem_zjistil, co_jsem_zmenil, co_cekam. Vypiš každou provedenou změnu včetně cesty nebo systémového cíle a výsledku ověření."
+    if str(task.get("scope", "")).startswith("home:"):
+        policy += " Každý přístup do home uveď v odpovědi jako auditní řádek: cesta, operace čtení/zápis a výsledek."
+    return policy
+
+
+def codex_home_audit(event, username):
+    encoded = json.dumps(event, ensure_ascii=False)
+    prefix = "/home/" + username
+    if prefix not in encoded:
+        return None
+    paths = sorted(set(re.findall(re.escape(prefix) + r"[^\s\"'<>]*", encoded)))
+    command = str(event.get("command", event.get("item", {}).get("command", ""))).lower()
+    operation = "zápis" if any(word in command for word in ("write", "edit", "rm ", "mv ", "cp ", "touch ", "mkdir", "chmod")) else "čtení/přístup"
+    outcome = event.get("exit_code", event.get("item", {}).get("exit_code", "viz výsledek nástroje"))
+    return f"home audit: {'; '.join(paths)} | {operation} | {outcome}"
 
 
 def prepare_codex_home(path):
@@ -278,7 +452,13 @@ def codex_sandbox(task, signed):
     if not isinstance(scope, str) or not scope or (scope not in ("system", "full") and not scope.startswith("home:")):
         raise ValueError("neplatný scope agenta")
     if mode == "read":
-        return ["--sandbox", "read-only"]
+        args = ["--sandbox", "read-only"]
+        if scope.startswith("home:"):
+            user = scope[5:]
+            if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.-]{0,31}", user) or user in (".", ".."):
+                raise ValueError("neplatný uživatel ve scope")
+            args.extend(["--add-dir", str(Path("/home") / user)])
+        return args
     if not signed or not isinstance(scope, str) or not scope:
         raise ValueError("režim act vyžaduje podepsaný úkol s explicitním scope")
     if scope == "full":
@@ -314,7 +494,7 @@ def dispatch_codex(repo, task, state, signed):
             return "rejected", {"error": "neplatný čas vytvoření úkolu"}
     if task_id in state.setdefault("agent_done", []):
         return "completed", {"duplicate": True}
-    policy = f"Scope úkolu: {task['scope']}; režim: {task.get('mode', 'read')}. Dodrž zadaný scope a pracuj jen se soubory a systémy souvisejícími s úkolem. Nečti ani nevypisuj nesouvisející osobní data. Nikdy nevypisuj hesla, tokeny, klíče ani obsah auth.json. Odpověď vrať přesně v oddílech stav, co_jsem_zjistil, co_jsem_zmenil, co_cekam. Vypiš každou provedenou změnu včetně cesty nebo systémového cíle a výsledku ověření."
+    policy = codex_policy(task)
     prompt = str(task.get("prompt", "")) + "\n\n" + policy
     if not prompt or len(prompt.encode("utf-8")) > LIMIT:
         return "rejected", {"error": "prompt je prázdný nebo překračuje limit 64 KiB"}
@@ -323,7 +503,7 @@ def dispatch_codex(repo, task, state, signed):
     workdir.mkdir(parents=True, exist_ok=True)
     prepare_codex_home(codex_home)
     try:
-        env, preexec = agent_environment(workdir, "codex")
+        env, preexec = agent_environment(workdir, "codex", task)
     except (KeyError, PermissionError):
         return "no-agent", {}
     env["CODEX_HOME"] = str(codex_home)
@@ -339,6 +519,7 @@ def dispatch_codex(repo, task, state, signed):
         return "error", {"error": "Codex se nepodařilo spustit", "detail": str(exc)}
     raw = completed.stdout[-LIMIT:]
     answer = []
+    home_audit = []
     for line in raw.splitlines():
         try:
             event = json.loads(line)
@@ -352,11 +533,18 @@ def dispatch_codex(repo, task, state, signed):
             item = event.get("item", {})
             if item.get("type") == "agent_message":
                 answer.append(str(item.get("text", "")))
+            username = str(task.get("scope", ""))[5:] if str(task.get("scope", "")).startswith("home:") else ""
+            if username:
+                audit = codex_home_audit(event, username)
+                if audit:
+                    home_audit.append(audit)
         if event.get("type") == "turn.completed":
             for item in event.get("items", []):
                 if item.get("type") == "agent_message":
                     answer.append(str(item.get("text", "")))
     output = trim("\n".join(answer) or raw)
+    if home_audit:
+        output = trim(output + "\n\n" + "\n".join(home_audit))
     if completed.returncode:
         return "error", {"exit_code": completed.returncode, "output": output}
     state.setdefault("agent_done", []).append(task_id)
@@ -380,7 +568,7 @@ def auth_codex(task):
     workdir = Path(config().get("agent_workdir", str(VAR / "agent-work")))
     workdir.mkdir(parents=True, exist_ok=True)
     try:
-        env, preexec = agent_environment(workdir, "codex")
+        env, preexec = agent_environment(workdir, "codex", task)
     except (KeyError, PermissionError):
         return "no-agent", {}
     env["CODEX_HOME"] = str(codex_home)
@@ -636,6 +824,8 @@ def relay_request(conf, method, suffix, value=None):
 
 def relay_loop_once(conf):
     global RELAY_HEARTBEAT_AT
+    flush_outbox(conf)
+    recover_interrupted_upgrades(Path(conf["repo"]), conf)
     sequence = int(conf.get("relay_sequence", 0))
     value = relay_request(conf, "GET", "wait?after=" + str(sequence))
     if time.monotonic() - RELAY_HEARTBEAT_AT >= random.uniform(100, 140):
@@ -659,6 +849,12 @@ def relay_loop_once(conf):
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}", task_id) or task.get("id") != task_id:
         relay_request(conf, "POST", "ack/result", {"task_id": task_id, "status": "rejected"})
         return
+    time_error = task_time_error(task)
+    if time_error:
+        rejection = {"id": task_id, "status": "timeout" if time_error == "podepsaný úkol vypršel" else "rejected", "reason": time_error, "time": now()}
+        write_json(Path(conf["repo"]) / "results" / (task_id + ".json"), rejection)
+        deliver_result(conf, Path(conf["repo"]), task_id, rejection)
+        return
     relay_request(conf, "POST", "ack/result", {"task_id": task_id, "status": "started"})
     repo = Path(conf["repo"])
     state_path = VAR / "watch-state.json"
@@ -667,29 +863,36 @@ def relay_loop_once(conf):
     except (OSError, json.JSONDecodeError):
         state = {}
     try:
-        lease = acquire_task_lease(VAR / "leases", task_id, blocking=True)
-        with lease:
+        leases = acquire_execution_lease(VAR / "leases", task_id, blocking=True)
+        with leases[0], leases[1]:
             try:
                 state = json.loads(state_path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError):
                 state = {}
-            if task_id in state.get("completed_ids", []):
+            if task_id in state.get("completed_ids", []) or task_id in state.get("delivery_pending_ids", []):
                 try:
                     result_data = json.loads((repo / "results" / (task_id + ".json")).read_text(encoding="utf-8"))
                 except (OSError, json.JSONDecodeError):
                     result_data = {"status": "completed"}
-                relay_request(conf, "POST", "ack/result", {"task_id": task_id, "status": result_data.get("status", "completed"), "result": result_data})
+                deliver_result(conf, repo, task_id, result_data)
                 return
-            execute(repo, task_path, task, state, signed=True)
-            remember_completed(repo, task_id, state)
+            retired = execute(repo, task_path, task, state, signed=True)
             write_json(state_path, state)
+        if retired:
+            final_path = repo / "results" / ("final-" + task_id + ".json")
+            if final_path.exists():
+                deliver_result(conf, repo, task_id, json.loads(final_path.read_text(encoding="utf-8")))
+            return
         try:
             result_data = json.loads((repo / "results" / (task_id + ".json")).read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             result_data = {"status": "completed"}
-        relay_request(conf, "POST", "ack/result", {"task_id": task_id, "status": result_data.get("status", "completed"), "result": result_data})
+        deliver_result(conf, repo, task_id, result_data)
     except Exception:
-        relay_request(conf, "POST", "ack/result", {"task_id": task_id, "status": "error"})
+        try:
+            queue_delivery(task_id, {"task_id": task_id, "status": "error"})
+        except Exception:
+            pass
         raise
 
 
@@ -727,29 +930,83 @@ def relay_recovered():
 
 def upgrade_diagnostics():
     apt = {}
-    for name, argv in (("dpkg_audit", ["dpkg", "--audit"]), ("apt_locks", ["fuser", "/var/lib/dpkg/lock", "/var/lib/dpkg/lock-frontend"]), ("apt_fix_dry_run", ["apt-get", "-s", "-f", "install"])):
+    for name, argv in (("dpkg_audit", ["dpkg", "--audit"]), ("apt_locks", ["fuser", "/var/lib/dpkg/lock", "/var/lib/dpkg/lock-frontend", "/var/lib/apt/lists/lock", "/var/cache/apt/archives/lock"]), ("apt_fix_dry_run", ["apt-get", "-s", "-f", "install"])):
         code, output = run(argv, timeout=15)
         apt[name] = {"exit_code": code, "output": trim(output)}
     snapshots = {}
     for name, argv in (("timeshift", ["timeshift", "--list"]), ("btrfs", ["btrfs", "subvolume", "list", "/"]), ("zfs", ["zfs", "list", "-t", "snapshot", "-o", "name,creation"])):
         code, output = run(argv, timeout=10)
         snapshots[name] = {"available": code == 0, "output": trim(output)}
-    return {"apt_dpkg": apt, "snapshots": snapshots, "apt_log": lines(Path("/var/log/apt/term.log"), 100), "dpkg_log": lines(Path("/var/log/dpkg.log"), 100)}
+    extra = {}
+    for key, argv in (("df_root", ["df", "-h", "/"]), ("df_boot", ["df", "-h", "/boot"]), ("df_home", ["df", "-h", "/home"]), ("inodes", ["df", "-i", "/", "/boot", "/home"]), ("power", ["sh", "-c", "for p in /sys/class/power_supply/*; do [ -e \"$p/online\" ] && printf '%s online=' \"$p\" && cat \"$p/online\"; [ -e \"$p/status\" ] && printf '%s status=' \"$p\" && cat \"$p/status\"; done"])):
+        code, output = run(argv, timeout=10)
+        extra[key] = {"exit_code": code, "output": trim(output)}
+    return {"apt_dpkg": apt, "snapshots": snapshots, "system": extra, "apt_log": lines(Path("/var/log/apt/term.log"), 100), "dpkg_log": lines(Path("/var/log/dpkg.log"), 100)}
 
 
-def execute_upgrade(task):
+def execute_upgrade(task, task_id="upgrade"):
     steps = task.get("steps")
     if not isinstance(steps, list) or not steps:
         return "rejected", {"error": "upgrade vyžaduje neprázdný seznam steps"}
+    state_path = VAR / "upgrade-state" / (str(task_id) + ".json")
+    prior = None
+    try:
+        prior = json.loads(state_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        pass
+    if prior and prior.get("status") == "running":
+        diagnostics = upgrade_diagnostics()
+        repair = {"exit_code": None, "output": "not allowed by task"}
+        if task.get("allow_dpkg_configure") is True:
+            code, output = run(["dpkg", "--configure", "-a"], timeout=3600)
+            repair = {"exit_code": code, "output": trim(output)}
+        prior["status"] = "blocked_waiting_instructions"
+        prior["recovery_diagnostics"] = diagnostics
+        write_json(state_path, prior)
+        return "blocked_waiting_instructions", {"resumed_after_restart": True, "previous_state": prior, "diagnostics": diagnostics, "dpkg_configure": repair, "rollback": "not_performed"}
+    if prior and prior.get("status") == "blocked_waiting_instructions":
+        return "blocked_waiting_instructions", {"resumed_after_restart": True, "previous_state": prior, "diagnostics": upgrade_diagnostics(), "rollback": "not_performed"}
     completed = []
+    write_json(state_path, {"status": "running", "task_id": task_id, "task": task, "steps": completed, "started_at": now()})
     for index, step in enumerate(steps, 1):
         if not isinstance(step, dict) or not isinstance(step.get("command"), str):
             return "rejected", {"error": "neplatný upgrade step"}
+        diagnostics = upgrade_diagnostics()
+        locks = diagnostics["apt_dpkg"]["apt_locks"].get("output", "")
+        if diagnostics["apt_dpkg"]["dpkg_audit"].get("output") or locks:
+            write_json(state_path, {"status": "running", "task_id": task_id, "task": task, "steps": completed, "before_step": index, "diagnostics": diagnostics})
+            return "blocked_waiting_instructions", {"completed_steps": completed, "failed_step": index, "diagnostics": diagnostics, "rollback": "not_performed"}
         code, output = cmd(step["command"], min(86400, max(1, int(step.get("timeout", 300)))))
         completed.append({"index": index, "name": str(step.get("name", "step-" + str(index))), "exit_code": code, "output": trim(output)})
+        write_json(state_path, {"status": "running", "task_id": task_id, "task": task, "steps": completed, "next_step": index + 1, "updated_at": now()})
         if code:
             return "blocked_waiting_instructions", {"completed_steps": completed, "failed_step": index, "diagnostics": upgrade_diagnostics(), "rollback": "not_performed"}
+    state_path.unlink(missing_ok=True)
     return "completed", {"completed_steps": completed}
+
+
+def recover_interrupted_upgrades(repo, conf):
+    directory = VAR / "upgrade-state"
+    if not directory.exists():
+        return 0
+    recovered = 0
+    for path in sorted(directory.glob("*.json")):
+        try:
+            prior = json.loads(path.read_text(encoding="utf-8"))
+            if prior.get("status") != "running" or not isinstance(prior.get("task"), dict):
+                continue
+            task_id = str(prior.get("task_id", path.stem))
+            leases = acquire_execution_lease(VAR / "leases", task_id)
+            if leases is None:
+                continue
+            with leases[0], leases[1]:
+                status, details = execute_upgrade(prior["task"], task_id)
+                result(repo, task_id, status, **details)
+            deliver_result(conf, repo, task_id, json.loads((repo / "results" / (task_id + ".json")).read_text(encoding="utf-8")))
+            recovered += 1
+        except Exception as exc:
+            print(json.dumps({"time": now(), "status": "upgrade_recovery_failed", "task_id": path.stem, "error": trim(str(exc))}), file=sys.stderr, flush=True)
+    return recovered
 
 
 def execute(repo, path, task, state, signed=False):
@@ -779,7 +1036,7 @@ def execute(repo, path, task, state, signed=False):
         Path(str(path) + ".sig").unlink(missing_ok=True)
         return False
     elif kind == "upgrade":
-        status, details = execute_upgrade(task)
+        status, details = execute_upgrade(task, task_id)
         result(repo, task_id, status, **details)
         path.unlink(missing_ok=True)
         Path(str(path) + ".sig").unlink(missing_ok=True)
@@ -815,7 +1072,9 @@ def cycle():
         return
     conf = config()
     repo = Path(conf["repo"])
+    recover_interrupted_upgrades(repo, conf)
     sync(repo)
+    flush_outbox_git(repo)
     conf["last_git_sync"] = now()
     write_json(ETC / "config.json", conf)
     write_json(repo / "hb" / (conf["id"] + ".json"), heartbeat(conf))
@@ -833,38 +1092,33 @@ def cycle():
     for path in pending:
         if not verify(path):
             rejected(repo, path, "podpis chybí nebo není platný")
-            push(repo, "guardian: rejected " + path.stem)
+            rejected_data = json.loads((repo / "results" / (path.stem[:100] + ".json")).read_text(encoding="utf-8"))
+            deliver_result(conf, repo, path.stem[:100], rejected_data)
             continue
         try:
             task = json.loads(path.read_text(encoding="utf-8"))
             if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}", path.stem) or task.get("id", path.stem) != path.stem:
                 raise ValueError("ID úkolu nesouhlasí s názvem souboru")
-            expires_at = task.get("expires_at")
-            if task.get("type") in ("agent", "auth") and not expires_at:
-                result(repo, path.stem, "rejected", reason="agentní úkolu chybí expirace")
-                path.unlink(missing_ok=True)
-                Path(str(path) + ".sig").unlink(missing_ok=True)
-                push(repo, "guardian: rejected " + path.stem)
+            if path.stem in state.get("delivery_pending_ids", []):
+                result_data = json.loads((repo / "results" / (path.stem + ".json")).read_text(encoding="utf-8"))
+                deliver_result(conf, repo, path.stem, result_data)
                 continue
-            if expires_at:
-                try:
-                    expires = datetime.fromisoformat(str(expires_at).replace("Z", "+00:00")).timestamp()
-                except ValueError:
-                    expires = 0
-                if expires <= time.time():
-                    result(repo, path.stem, "timeout", reason="podepsaný úkol vypršel")
-                    path.unlink(missing_ok=True)
-                    Path(str(path) + ".sig").unlink(missing_ok=True)
-                    push(repo, "guardian: expired " + path.stem)
-                    continue
             if path.stem in state.get("completed_ids", []):
                 path.unlink(missing_ok=True)
                 Path(str(path) + ".sig").unlink(missing_ok=True)
                 continue
-            lease = acquire_task_lease(VAR / "leases", path.stem)
-            if lease is None:
+            time_error = task_time_error(task)
+            if time_error:
+                result(repo, path.stem, "timeout" if time_error == "podepsaný úkol vypršel" else "rejected", reason=time_error)
+                path.unlink(missing_ok=True)
+                Path(str(path) + ".sig").unlink(missing_ok=True)
+                result_data = json.loads((repo / "results" / (path.stem + ".json")).read_text(encoding="utf-8"))
+                deliver_result(conf, repo, path.stem, result_data)
                 continue
-            with lease:
+            leases = acquire_execution_lease(VAR / "leases", path.stem)
+            if leases is None:
+                continue
+            with leases[0], leases[1]:
                 try:
                     state = json.loads(state_path.read_text(encoding="utf-8"))
                 except (OSError, json.JSONDecodeError):
@@ -872,16 +1126,19 @@ def cycle():
                 if path.stem in state.get("completed_ids", []):
                     continue
                 retired = execute(repo, path, task, state, signed=True)
-                remember_completed(repo, path.stem, state)
                 write_json(state_path, state)
             if retired:
+                final_path = repo / "results" / ("final-" + path.stem + ".json")
+                if final_path.exists():
+                    deliver_result(conf, repo, path.stem, json.loads(final_path.read_text(encoding="utf-8")))
                 return
-            push(repo, "guardian: result " + str(task.get("id", path.stem)))
+            result_data = json.loads((repo / "results" / (path.stem + ".json")).read_text(encoding="utf-8"))
+            deliver_result(config(), repo, path.stem, result_data)
         except Exception as e:
-            result(repo, path.stem, "failed", error=trim(str(e)))
+            failure = result(repo, path.stem, "failed", error=trim(str(e)))
             path.unlink(missing_ok=True)
             Path(str(path) + ".sig").unlink(missing_ok=True)
-            push(repo, "guardian: failed " + path.stem)
+            deliver_result(conf, repo, path.stem, failure)
 
 
 def main():

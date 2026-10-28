@@ -1,19 +1,19 @@
 ---
-- name: Ověřit nastavení Guardiana
-  ansible.builtin.assert:
-    that:
-      - guardian_provider in ['codex', 'claude']
-      - guardian_station_id | length > 0
-      - guardian_relay_url is match('^https://')
-    fail_msg: Nastavení Guardiana je neúplné nebo neplatné.
-  when: guardian_enabled | bool
-
 - name: Načíst tajemství Guardiana stanice
   ansible.builtin.set_fact:
     guardian_secrets: >-
       {{ lookup('community.sops.sops', playbook_dir ~ '/host_vars/' ~ station_id ~ '.sops.yaml',
       input_type='yaml', output_type='yaml') | from_yaml }}
   no_log: true
+  when: guardian_enabled | bool
+
+- name: Ověřit nastavení Guardiana
+  ansible.builtin.assert:
+    that:
+      - guardian_provider in ['codex', 'claude']
+      - guardian_station_id | length > 0
+      - (guardian_relay_url | default(guardian_secrets.relay_url, true)) is match('^https://')
+    fail_msg: Nastavení Guardiana je neúplné nebo neplatné.
   when: guardian_enabled | bool
 
 - name: Ověřit tajemství Guardiana
@@ -77,55 +77,44 @@
   notify: Restartovat Guardiana
   when: guardian_enabled | bool
 
-- name: Nainstalovat Codex CLI oficiálním instalátorem, pokud chybí
+- name: Nainstalovat ověřenou binárku Codex CLI
   when: guardian_enabled | bool and guardian_provider == 'codex'
   block:
-    - name: Zjistit existenci Codex CLI
-      ansible.builtin.stat:
-        path: "{{ guardian_home }}/.local/bin/codex"
-      register: guardian_codex_binary
-
-    - name: Stáhnout oficiální instalační skript Codex CLI
+    - name: Stáhnout připnutý archiv Codex CLI
       ansible.builtin.get_url:
-        url: https://chatgpt.com/codex/install.sh
-        dest: /opt/upgrade-guardian/codex-install.sh
-        owner: root
-        group: root
-        mode: '0755'
-      when: not guardian_codex_binary.stat.exists
+        url: https://github.com/openai/codex/releases/download/rust-v0.164.0/codex-x86_64-unknown-linux-musl.tar.gz
+        dest: /opt/upgrade-guardian/codex.tar.gz
+        checksum: sha256:90dd0b03b28afcb7fa733a4f73b413db2916a47347efd43fb669cc1c774ee8e4
+        mode: '0644'
 
-    - name: Nainstalovat připnuté vydání Codex CLI
-      ansible.builtin.command:
-        argv:
-          - /bin/sh
-          - /opt/upgrade-guardian/codex-install.sh
-          - --release
-          - "{{ guardian_codex_version }}"
-      become_user: guardian-agent
-      become: true
-      environment:
-        HOME: "{{ guardian_home }}"
-        CODEX_HOME: "{{ guardian_codex_home }}"
-        CODEX_NON_INTERACTIVE: '1'
-        CODEX_INSTALL_DIR: "{{ guardian_home }}/.local/bin"
-      args:
-        creates: "{{ guardian_home }}/.local/bin/codex"
-      when: not guardian_codex_binary.stat.exists
-
-    - name: Odstranit instalační skript Codex CLI
+    - name: Vytvořit adresář binárky Codex
       ansible.builtin.file:
-        path: /opt/upgrade-guardian/codex-install.sh
-        state: absent
+        path: "{{ guardian_home }}/.local/bin"
+        state: directory
+        owner: guardian-agent
+        group: guardian-agent
+        mode: '0755'
 
-- name: Vyžadovat předinstalovaný Codex CLI
-  ansible.builtin.command:
-    argv:
-      - "{{ guardian_home }}/.local/bin/codex"
-      - --version
-  register: guardian_codex_version_check
-  changed_when: false
-  failed_when: guardian_codex_version_check.rc != 0
-  when: guardian_enabled | bool and guardian_provider == 'codex'
+    - name: Rozbalit Codex CLI
+      ansible.builtin.unarchive:
+        src: /opt/upgrade-guardian/codex.tar.gz
+        dest: /opt/upgrade-guardian
+        remote_src: true
+
+    - name: Instalovat Codex CLI
+      ansible.builtin.copy:
+        src: /opt/upgrade-guardian/codex-x86_64-unknown-linux-musl
+        dest: "{{ guardian_home }}/.local/bin/codex"
+        remote_src: true
+        owner: guardian-agent
+        group: guardian-agent
+        mode: '0755'
+
+    - name: Ověřit připnutou verzi Codex CLI
+      ansible.builtin.command: '"{{ guardian_home }}/.local/bin/codex" --version'
+      register: guardian_codex_version_check
+      changed_when: false
+      failed_when: "guardian_codex_version_check.rc != 0 or '0.164.0' not in guardian_codex_version_check.stdout"
 
 - name: Zapsat veřejný klíč mastera pro ověřování podpisů
   ansible.builtin.copy:
@@ -147,6 +136,7 @@
   when: guardian_enabled | bool
 
 - name: Zapsat konfiguraci Guardiana
+  no_log: true
   ansible.builtin.copy:
     dest: /etc/upgrade-guardian/config.json
     content: "{{ guardian_config | to_nice_json }}\n"
@@ -160,7 +150,7 @@
       repo: /var/lib/upgrade-guardian/repo
       host_key: /etc/upgrade-guardian/station_ed25519
       last_git_sync: never
-      relay_url: "{{ guardian_relay_url }}"
+      relay_url: "{{ guardian_relay_url | default(guardian_secrets.relay_url, true) }}"
       relay_key_file: /etc/upgrade-guardian/station.key
       agent_provider: "{{ guardian_provider }}"
       agent_profile: temporary
