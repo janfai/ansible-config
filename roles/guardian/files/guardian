@@ -17,8 +17,10 @@ import ssl
 import stat
 import subprocess
 import sys
+import threading
 import time
 import urllib.parse
+from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -36,6 +38,7 @@ RELAY_CONN_CREATED = 0
 RELAY_CONN_LIFETIME = 0
 RELAY_HEARTBEAT_AT = 0
 VERIFIED_SIGNER = None
+GIT_LOCK = threading.RLock()
 
 
 def now():
@@ -46,6 +49,12 @@ def run(argv, timeout=30, input_text=None, env=None):
     if argv and argv[0] == "git":
         env = dict(os.environ if env is None else env)
         env.setdefault("GIT_SSH_COMMAND", "ssh -F /etc/upgrade-guardian/ssh_config")
+        with GIT_LOCK:
+            return run_process(argv, timeout, input_text, env)
+    return run_process(argv, timeout, input_text, env)
+
+
+def run_process(argv, timeout, input_text, env):
     try:
         p = subprocess.run(argv, input=input_text, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout, env=env)
         return p.returncode, p.stdout
@@ -70,25 +79,36 @@ def git(repo, *args):
 
 
 def sync(repo):
-    git(repo, "add", "-A")
-    code, _ = run(["git", "-C", str(repo), "diff", "--cached", "--quiet"])
-    if code == 1:
-        git(repo, "-c", "user.name=upgrade-guardian", "-c", "user.email=guardian@localhost", "commit", "-m", "guardian: local working tree sync")
-    try:
-        git(repo, "pull", "--rebase", "origin", "master")
-    except RuntimeError:
-        git(repo, "fetch", "origin", "master")
-        git(repo, "rebase", "origin/master")
+    with GIT_LOCK:
+        git(repo, "add", "-A")
+        code, _ = run(["git", "-C", str(repo), "diff", "--cached", "--quiet"])
+        if code not in (0, 1):
+            raise RuntimeError("nelze zjistit lokální změny před synchronizací")
+        if code == 1:
+            git(repo, "-c", "user.name=upgrade-guardian", "-c", "user.email=guardian@localhost", "commit", "-m", "guardian: local working tree sync")
+        try:
+            git(repo, "pull", "--rebase", "origin", "master")
+        except RuntimeError:
+            git(repo, "fetch", "origin", "master")
+            git(repo, "rebase", "origin/master")
 
 
 def push(repo, message):
-    git(repo, "add", "-A")
-    code, out = run(["git", "-C", str(repo), "diff", "--cached", "--quiet"])
-    if code not in (0, 1):
-        raise RuntimeError(out[-2000:])
-    if code == 1:
-        git(repo, "-c", "user.name=upgrade-guardian", "-c", "user.email=guardian@localhost", "commit", "-m", message)
-    git(repo, "push", "origin", "master")
+    with GIT_LOCK:
+        git(repo, "add", "-A")
+        code, out = run(["git", "-C", str(repo), "diff", "--cached", "--quiet"])
+        if code not in (0, 1):
+            raise RuntimeError(out[-2000:])
+        if code == 1:
+            git(repo, "-c", "user.name=upgrade-guardian", "-c", "user.email=guardian@localhost", "commit", "-m", message)
+        try:
+            git(repo, "push", "origin", "master")
+        except RuntimeError as exc:
+            if not any(marker in str(exc).lower() for marker in ("non-fast-forward", "fetch first", "rejected")):
+                raise
+            git(repo, "fetch", "origin", "master")
+            git(repo, "rebase", "origin/master")
+            git(repo, "push", "origin", "master")
 
 
 def verify_signer(path, namespace="upgrade-guardian", principals=None):
@@ -118,6 +138,14 @@ def board_verify(path):
 
 def task_station_mismatch(task, station_id):
     return "station" in task and task["station"] != station_id
+
+
+def relay_task_station_error(task, station_id, allow_legacy=False):
+    if "station" not in task:
+        return None if allow_legacy else "úkol nemá cílovou stanici"
+    if task_station_mismatch(task, station_id):
+        return "úkol je určen jiné stanici"
+    return None
 
 
 def board_receive(repo, conf):
@@ -164,7 +192,7 @@ def say(recipient, body):
     conf = config()
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}|jan", recipient):
         raise ValueError("Neplatný adresát")
-    if not isinstance(body, str) or not body.strip():
+    if not isinstance(body, str) or not body.strip() or len(body.encode("utf-8")) > 16384:
         raise ValueError("Tělo musí mít 1 až 16384 bajtů")
     body = body.rstrip() + "\n\n" + station_identity(conf["id"])
     if len(body.encode("utf-8")) > 16384:
@@ -210,8 +238,135 @@ def trim(text):
     return text[-LIMIT:]
 
 
-def cmd(command, timeout):
-    return run(["/bin/bash", "-lc", command], timeout=max(1, min(int(timeout), 86400)))
+def redact_output_line(value):
+    value = re.sub(r"(?i)(password|passwd|passphrase|token|secret|credential|api[_-]?key|access[_-]?key|client[_-]?secret|authorization)([\"']?\s*[:=]\s*[\"']?)([^\s,;\"']+)", r"\1\2[redacted]", value)
+    value = re.sub(r"(?i)(bearer\s+)[A-Za-z0-9._~+/=-]+", r"\1[redacted]", value)
+    value = re.sub(r"(?i)(https?://)[^/@\s:]+:[^/@\s]+@", r"\1[redacted]@", value)
+    value = re.sub(r"\b[A-Za-z0-9_+/=-]{32,}\b", "[redacted token]", value)
+    value = re.sub(r"-----BEGIN [^-]*PRIVATE KEY-----.*?-----END [^-]*PRIVATE KEY-----", "[redacted private key]", value)
+    return value[:500]
+
+
+def busy_payload(conf, task_id, task_type, started_at, started_mono, output_lines):
+    return {"status": "busy", "task_id": task_id, "type": task_type, "started_at": started_at, "elapsed_seconds": max(0, int(time.monotonic() - started_mono)), "output_tail": list(output_lines)[-20:]}
+
+
+def publish_busy(conf, repo, task_id, task_type, started_at, started_mono, output_lines):
+    data = heartbeat(conf)
+    data["busy"] = busy_payload(conf, task_id, task_type, started_at, started_mono, output_lines)
+    if conf.get("relay_url"):
+        relay_request(conf, "POST", "ack/result", {"status": "heartbeat", "station_id": conf["id"], "result": data}, dedicated=True)
+    else:
+        with GIT_LOCK:
+            write_json(repo / "hb" / (conf["id"] + ".json"), data)
+            git(repo, "add", "-A")
+            code, output = run(["git", "-C", str(repo), "diff", "--cached", "--quiet"])
+            if code not in (0, 1):
+                raise RuntimeError(output[-1000:])
+            if code == 1:
+                git(repo, "-c", "user.name=upgrade-guardian", "-c", "user.email=guardian@localhost", "commit", "-m", "guardian: busy heartbeat " + conf["id"])
+            try:
+                git(repo, "push", "origin", "master")
+            except RuntimeError as exc:
+                if not any(marker in str(exc).lower() for marker in ("non-fast-forward", "fetch first", "rejected")):
+                    raise
+                git(repo, "fetch", "origin", "master")
+                git(repo, "rebase", "origin/master")
+                git(repo, "push", "origin", "master")
+
+
+def publish_regular_heartbeat(conf, repo):
+    data = heartbeat(conf)
+    if conf.get("relay_url"):
+        relay_request(conf, "POST", "ack/result", {"status": "heartbeat", "station_id": conf["id"], "result": data}, dedicated=True)
+    else:
+        with GIT_LOCK:
+            write_json(repo / "hb" / (conf["id"] + ".json"), data)
+            push(repo, "guardian: heartbeat " + conf["id"])
+
+
+def cmd(command, timeout, conf=None, task_id=None, task_type=None):
+    timeout = max(1, min(int(timeout), 86400))
+    interval = conf.get("busy_heartbeat_seconds", 60) if conf else 0
+    try:
+        interval = max(0, float(interval))
+    except (TypeError, ValueError):
+        interval = 60
+    if not conf or not task_id or not task_type or interval <= 0:
+        return run(["/bin/bash", "-lc", command], timeout=timeout)
+    repo = Path(conf["repo"])
+    started_mono = time.monotonic()
+    started_at = now()
+    output_lines = deque(maxlen=20)
+    partial_line = [""]
+    stop = threading.Event()
+
+    def emit_output(text):
+        if text:
+            pieces = (partial_line[0] + text).splitlines(keepends=True)
+            partial_line[0] = ""
+            if pieces and not pieces[-1].endswith(("\n", "\r")):
+                partial_line[0] = pieces.pop()[-2000:]
+            for item in pieces:
+                output_lines.append(redact_output_line(item))
+
+    def heartbeat_worker():
+        while not stop.wait(interval):
+            try:
+                tail = list(output_lines)[-19:]
+                if partial_line[0]:
+                    tail.append(redact_output_line(partial_line[0]))
+                publish_busy(conf, repo, task_id, task_type, started_at, started_mono, tail)
+            except Exception as exc:
+                print(json.dumps({"status": "busy_heartbeat_failed", "task_id": task_id, "error": type(exc).__name__}), file=sys.stderr, flush=True)
+
+    worker = threading.Thread(target=heartbeat_worker, name="guardian-busy-heartbeat", daemon=True)
+    worker.start()
+    process = None
+    timed_out = False
+    collected = ""
+    try:
+        process = subprocess.Popen(["/bin/bash", "-lc", command], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=0)
+        selector = selectors.DefaultSelector()
+        selector.register(process.stdout, selectors.EVENT_READ)
+        deadline = time.monotonic() + timeout
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0 and process.poll() is None:
+                timed_out = True
+                process.terminate()
+                try:
+                    process.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                break
+            events = selector.select(min(0.25, max(0.01, remaining)))
+            for key, _ in events:
+                chunk = os.read(key.fileobj.fileno(), 4096)
+                if not chunk:
+                    selector.unregister(key.fileobj)
+                    continue
+                decoded = chunk.decode("utf-8", "replace")
+                collected = (collected + decoded)[-LIMIT:]
+                emit_output(decoded)
+            if process.poll() is not None and not selector.get_map():
+                break
+        if process.poll() is None:
+            process.wait()
+        if process.stdout:
+            process.stdout.close()
+        if timed_out:
+            collected = (collected + "\nTIMEOUT")[-LIMIT:]
+        return (124 if timed_out else process.returncode), collected
+    except OSError as exc:
+        return 127, str(exc)
+    finally:
+        stop.set()
+        worker.join(timeout=2)
+        try:
+            publish_regular_heartbeat(conf, repo)
+        except Exception as exc:
+            print(json.dumps({"status": "post_task_heartbeat_failed", "task_id": task_id, "error": type(exc).__name__}), file=sys.stderr, flush=True)
 
 
 def lines(path, count=30):
@@ -917,7 +1072,7 @@ def relay_auth(conf, method, path, body):
     return headers
 
 
-def relay_request(conf, method, suffix, value=None):
+def relay_request(conf, method, suffix, value=None, dedicated=False):
     global RELAY_CONN, RELAY_CONN_CREATED, RELAY_CONN_LIFETIME
     base = urllib.parse.urlsplit(conf["relay_url"])
     path = base.path.rstrip("/") + "/" + suffix.lstrip("/")
@@ -927,7 +1082,15 @@ def relay_request(conf, method, suffix, value=None):
     body = json.dumps(payload_value, separators=(",", ":")).encode()
     ctx = ssl.create_default_context()
     ctx.set_alpn_protocols(["http/1.1"])
-    if RELAY_CONN is None or time.monotonic() - RELAY_CONN_CREATED >= RELAY_CONN_LIFETIME:
+    connection = None
+    if dedicated:
+        if base.scheme == "https":
+            connection = http.client.HTTPSConnection(base.hostname, base.port or 443, timeout=8, context=ctx)
+        elif base.scheme == "http" and base.hostname in ("127.0.0.1", "localhost"):
+            connection = http.client.HTTPConnection(base.hostname, base.port or 80, timeout=8)
+        else:
+            raise RuntimeError("Relay vyžaduje HTTPS")
+    elif RELAY_CONN is None or time.monotonic() - RELAY_CONN_CREATED >= RELAY_CONN_LIFETIME:
         if RELAY_CONN is not None:
             RELAY_CONN.close()
         if base.scheme == "https":
@@ -938,18 +1101,24 @@ def relay_request(conf, method, suffix, value=None):
             raise RuntimeError("Relay vyžaduje HTTPS")
         RELAY_CONN_CREATED = time.monotonic()
         RELAY_CONN_LIFETIME = random.uniform(900, 1800)
+    if not dedicated:
+        connection = RELAY_CONN
     headers = relay_auth(conf, method, urllib.parse.urlsplit(path).path, body)
     if conf.get("camouflage", False):
         headers["X-Guardian-Camouflage"] = "1"
     try:
-        RELAY_CONN.request(method, path, body, headers)
-        response = RELAY_CONN.getresponse()
+        connection.request(method, path, body, headers)
+        response = connection.getresponse()
         data = response.read(131072)
         status = response.status
     except OSError:
-        RELAY_CONN.close()
-        RELAY_CONN = None
+        connection.close()
+        if not dedicated:
+            RELAY_CONN = None
         raise
+    finally:
+        if dedicated:
+            connection.close()
     if status not in (200, 204):
         raise RuntimeError("Relay HTTP " + str(status))
     return json.loads(data) if data else None
@@ -982,6 +1151,12 @@ def relay_loop_once(conf):
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}", task_id) or task.get("id") != task_id:
         relay_request(conf, "POST", "ack/result", {"task_id": task_id, "status": "rejected"})
         return
+    station_error = relay_task_station_error(task, conf["id"], conf.get("relay_allow_legacy_tasks", False))
+    if station_error:
+        relay_request(conf, "POST", "ack/result", {"task_id": task_id, "status": "rejected"})
+        return
+    if "station" not in task:
+        print(json.dumps({"status": "legacy_task_without_station", "task_id": task_id}), file=sys.stderr, flush=True)
     time_error = task_time_error(task)
     if time_error:
         rejection = {"id": task_id, "status": "timeout" if time_error == "podepsaný úkol vypršel" else "rejected", "reason": time_error, "time": now()}
@@ -1009,7 +1184,7 @@ def relay_loop_once(conf):
                     result_data = {"status": "completed"}
                 deliver_result(conf, repo, task_id, result_data)
                 return
-            retired = execute(repo, task_path, task, state, signed=True)
+            retired = execute(repo, task_path, task, state, signed=True, conf=conf)
             write_json(state_path, state)
         if retired:
             final_path = repo / "results" / ("final-" + task_id + ".json")
@@ -1077,9 +1252,9 @@ def upgrade_diagnostics():
     return {"apt_dpkg": apt, "snapshots": snapshots, "system": extra, "apt_log": lines(Path("/var/log/apt/term.log"), 100), "dpkg_log": lines(Path("/var/log/dpkg.log"), 100)}
 
 
-def execute_upgrade(task, task_id="upgrade"):
+def execute_upgrade(task, task_id="upgrade", conf=None):
     if NO_SYSTEMD:
-        return execute_upgrade_steps(task, task_id)
+        return execute_upgrade_steps(task, task_id, conf)
     code, output = run(["systemctl", "is-active", "ansible-pull.timer"], timeout=30)
     restore = code == 0
     code, output = run(["systemctl", "mask", "--runtime", "--now", "ansible-pull.timer"], timeout=30)
@@ -1089,7 +1264,7 @@ def execute_upgrade(task, task_id="upgrade"):
         code, output = run(["systemctl", "show", "ansible-pull.service", "--property=ActiveState", "--value"], timeout=30)
         if code or output.strip() not in ("inactive", "failed"):
             return "blocked_waiting_instructions", {"error": "ansible-pull.service není nečinný", "output": trim(output)}
-        return execute_upgrade_steps(task, task_id)
+        return execute_upgrade_steps(task, task_id, conf)
     finally:
         code, output = run(["systemctl", "unmask", "--runtime", "ansible-pull.timer"], timeout=30)
         if code:
@@ -1100,7 +1275,7 @@ def execute_upgrade(task, task_id="upgrade"):
                 raise RuntimeError("Nelze obnovit ansible-pull.timer: " + trim(output))
 
 
-def execute_upgrade_steps(task, task_id="upgrade"):
+def execute_upgrade_steps(task, task_id="upgrade", conf=None):
     steps = task.get("steps")
     if not isinstance(steps, list) or not steps:
         return "rejected", {"error": "upgrade vyžaduje neprázdný seznam steps"}
@@ -1132,7 +1307,11 @@ def execute_upgrade_steps(task, task_id="upgrade"):
         if diagnostics["apt_dpkg"]["dpkg_audit"].get("output") or locks:
             write_json(state_path, {"status": "running", "task_id": task_id, "task": task, "steps": completed, "before_step": index, "diagnostics": diagnostics})
             return "blocked_waiting_instructions", {"completed_steps": completed, "failed_step": index, "diagnostics": diagnostics, "rollback": "not_performed"}
-        code, output = cmd(step["command"], min(86400, max(1, int(step.get("timeout", 300)))))
+        step_timeout = min(86400, max(1, int(step.get("timeout", 300))))
+        if conf:
+            code, output = cmd(step["command"], step_timeout, conf, task_id, "upgrade")
+        else:
+            code, output = cmd(step["command"], step_timeout)
         completed.append({"index": index, "name": str(step.get("name", "step-" + str(index))), "exit_code": code, "output": trim(output)})
         write_json(state_path, {"status": "running", "task_id": task_id, "task": task, "steps": completed, "next_step": index + 1, "updated_at": now()})
         if code:
@@ -1162,7 +1341,7 @@ def recover_interrupted_upgrades(repo, conf):
                     status = "blocked_waiting_instructions"
                     details = {"resumed_after_restart": True, "previous_state": prior, "diagnostics": upgrade_diagnostics(), "rollback": "not_performed"}
                 else:
-                    status, details = execute_upgrade(prior["task"], task_id)
+                    status, details = execute_upgrade(prior["task"], task_id, conf)
                 result(repo, task_id, status, **details)
             deliver_result(conf, repo, task_id, json.loads((repo / "results" / (task_id + ".json")).read_text(encoding="utf-8")))
             recovered += 1
@@ -1171,7 +1350,7 @@ def recover_interrupted_upgrades(repo, conf):
     return recovered
 
 
-def execute(repo, path, task, state, signed=False):
+def execute(repo, path, task, state, signed=False, conf=None):
     task_id = str(task.get("id", path.stem))
     kind = task.get("type")
     if kind == "ping":
@@ -1185,7 +1364,7 @@ def execute(repo, path, task, state, signed=False):
             result(repo, task_id, "blocked_waiting_instructions", resumed_after_restart=True, rollback="not_performed")
             return False
         write_json(state_path, {"status": "running", "task_id": task_id, "task": task, "started_at": now()})
-        code, out = cmd(str(task.get("command", "")), task.get("timeout", 300))
+        code, out = cmd(str(task.get("command", "")), task.get("timeout", 300), conf, task_id, "cmd")
         result(repo, task_id, "ok" if code == 0 else "failed", exit_code=code, output=trim(out))
         state_path.unlink(missing_ok=True)
         path.unlink(missing_ok=True)
@@ -1204,7 +1383,7 @@ def execute(repo, path, task, state, signed=False):
         Path(str(path) + ".sig").unlink(missing_ok=True)
         return False
     elif kind == "upgrade":
-        status, details = execute_upgrade(task, task_id)
+        status, details = execute_upgrade(task, task_id, conf)
         result(repo, task_id, status, **details)
         path.unlink(missing_ok=True)
         Path(str(path) + ".sig").unlink(missing_ok=True)
@@ -1306,7 +1485,7 @@ def cycle():
                     state = {}
                 if path.stem in state.get("completed_ids", []):
                     continue
-                retired = execute(repo, path, task, state, signed=True)
+                retired = execute(repo, path, task, state, signed=True, conf=conf)
                 write_json(state_path, state)
             if retired:
                 final_path = repo / "results" / ("final-" + path.stem + ".json")
@@ -1322,6 +1501,12 @@ def cycle():
             Path(str(path) + ".sig").unlink(missing_ok=True)
             deliver_result(conf, repo, path.stem, failure)
     VERIFIED_SIGNER = None
+
+
+def next_cycle_delay(conf, relay_mode):
+    if relay_mode and conf.get("relay_url"):
+        return random.uniform(0.5, 3)
+    return max(30, int(120 * random.uniform(1, 1.1667)))
 
 
 def main():
@@ -1358,7 +1543,7 @@ def main():
             if not relay_mode or not conf.get("relay_url"):
                 cycle()
             fails = 0
-            delay = max(30, int(120 * random.uniform(1, 1.1667))) if not relay_mode else random.uniform(0.5, 3)
+            delay = next_cycle_delay(conf, relay_mode)
         except Exception as e:
             fails += 1
             if conf.get("relay_url") and relay_mode:
