@@ -1,4 +1,11 @@
 ---
+- name: Ověřit povolení legacy relay autentizace
+  ansible.builtin.assert:
+    that:
+      - not (station_config.guardian_relay_legacy_auth | default(false) | bool) or guardian_station_id == guardian_legacy_station_id
+    fail_msg: Legacy relay autentizace je povolena pouze pro stanici lada.
+  when: guardian_enabled | bool
+
 - name: Načíst tajemství Guardiana stanice
   ansible.builtin.set_fact:
     guardian_secrets: >-
@@ -24,6 +31,14 @@
       - guardian_secrets.allowed_signers is defined
       - guardian_secrets.allowed_signers | length > 0
     fail_msg: Šifrovaný soubor stanice nemá požadovaný HMAC klíč a allowed_signers.
+  no_log: true
+  when: guardian_enabled | bool
+
+- name: Ověřit odlišnost HMAC klíče od legacy klíče
+  ansible.builtin.assert:
+    that:
+      - guardian_legacy_hmac_key | length == 0 or guardian_hmac_key != guardian_legacy_hmac_key
+    fail_msg: HMAC klíč stanice se shoduje s legacy klíčem.
   no_log: true
   when: guardian_enabled | bool
 

@@ -2,6 +2,8 @@
 guardian_enabled: false
 guardian_provider: codex
 guardian_station_id: "{{ station_id }}"
+guardian_legacy_station_id: lada
+guardian_legacy_hmac_key: "{{ guardian_secrets.legacy_hmac_key | default('') }}"
 guardian_relay_url: ""
 guardian_codex_version: 0.164.0
 guardian_signer: jan
