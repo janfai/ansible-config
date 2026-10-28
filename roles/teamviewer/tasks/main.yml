@@ -13,13 +13,23 @@
     owner: root
     group: root
     mode: '0644'
+  register: teamviewer_repository
   when: teamviewer_enabled | bool
+
+- name: Aktualizovat indexy po změně repozitáře TeamVieweru
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+  changed_when: false
+  when:
+    - teamviewer_enabled | bool
+    - teamviewer_repository.changed
+    - not ansible_check_mode
 
 - name: Zajistit instalaci TeamVieweru
   ansible.builtin.apt:
     name: teamviewer
     state: present
-    update_cache: true
   when: teamviewer_enabled | bool
 
 - name: Zapnout a spustit službu TeamVieweru

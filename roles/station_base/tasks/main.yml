@@ -161,24 +161,37 @@
       - -c
       - |
         set -o pipefail
-        config_file=
+        config_status=none
         for directory in /etc/openvpn/client /etc/openvpn/server; do
           if [ -d "$directory" ]; then
-            config_file=$(find "$directory" -type f -name '*.conf' -print -quit) || exit 2
-            if [ -n "$config_file" ]; then break; fi
+            if config_file=$(find "$directory" -name '*.conf' -print -quit); then
+              if [ -n "$config_file" ]; then config_status=found; break; fi
+            else
+              config_status=unknown
+              break
+            fi
           fi
         done
         if command -v nmcli >/dev/null 2>&1; then
-          if nmcli -t -f TYPE connection show | grep -Fxq vpn; then vpn=yes; else vpn=no; fi
+          if connection_types=$(nmcli -t -f TYPE connection show); then
+            if printf '%s\n' "$connection_types" | grep -Fxq vpn; then vpn=yes; else vpn=no; fi
+          else
+            vpn=unknown
+          fi
         else
           vpn=unknown
         fi
         if command -v pgrep >/dev/null 2>&1; then
-          if pgrep -x openvpn >/dev/null 2>&1; then process=yes; else process=no; fi
+          if pgrep -x openvpn >/dev/null 2>&1; then
+            process=yes
+          else
+            result=$?
+            if [ "$result" -eq 1 ]; then process=no; else process=unknown; fi
+          fi
         else
           process=unknown
         fi
-        printf 'conf=%s\nvpn=%s\nprocess=%s\n' "$config_file" "$vpn" "$process"
+        printf 'conf=%s\nvpn=%s\nprocess=%s\n' "$config_status" "$vpn" "$process"
   register: station_base_openvpn_safety
   changed_when: false
   check_mode: false
@@ -192,7 +205,7 @@
     autoremove: true
   when:
     - station_base_absent_packages | length > 0
-    - "'conf=' in station_base_openvpn_safety.stdout_lines"
+    - "'conf=none' in station_base_openvpn_safety.stdout_lines"
     - "'vpn=no' in station_base_openvpn_safety.stdout_lines"
     - "'process=no' in station_base_openvpn_safety.stdout_lines"
 
@@ -204,6 +217,6 @@
   when:
     - station_base_absent_packages | length > 0
     - >-
-      'conf=' not in station_base_openvpn_safety.stdout_lines or
+      'conf=none' not in station_base_openvpn_safety.stdout_lines or
       'vpn=no' not in station_base_openvpn_safety.stdout_lines or
       'process=no' not in station_base_openvpn_safety.stdout_lines

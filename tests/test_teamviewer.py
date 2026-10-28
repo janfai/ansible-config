@@ -14,11 +14,15 @@ class TeamViewer(unittest.TestCase):
         repo = next(t["ansible.builtin.copy"] for t in tasks if "ansible.builtin.copy" in t)
         self.assertIn("signed-by=/usr/share/keyrings/teamviewer-keyring.gpg", repo["content"])
         self.assertIn("/deb stable main", repo["content"])
-        package = next(t["ansible.builtin.apt"] for t in tasks if "ansible.builtin.apt" in t)
-        self.assertEqual(package, {"name": "teamviewer", "state": "present", "update_cache": True})
+        package = next(t["ansible.builtin.apt"] for t in tasks if t.get("ansible.builtin.apt", {}).get("name") == "teamviewer")
+        self.assertEqual(package, {"name": "teamviewer", "state": "present"})
+        cache = next(t for t in tasks if t.get("name") == "Aktualizovat indexy po změně repozitáře TeamVieweru")
+        self.assertFalse(cache["changed_when"])
+        self.assertIn("not ansible_check_mode", cache["when"])
         service = next(t["ansible.builtin.systemd"] for t in tasks if "ansible.builtin.systemd" in t)
         self.assertEqual(service, {"name": "teamviewerd.service", "enabled": True, "state": "started"})
-        self.assertTrue(all(t.get("when") == "teamviewer_enabled | bool" for t in tasks))
+        self.assertEqual(tasks[0]["when"], "teamviewer_enabled | bool")
+        self.assertTrue(all("teamviewer_enabled | bool" in (t.get("when") if isinstance(t.get("when"), list) else [t.get("when")]) for t in tasks))
         self.assertIn("station_id == 'lada'", tasks[0]["ansible.builtin.assert"]["that"])
 
     def test_station_configuration_is_opted_in_and_role_is_included(self):

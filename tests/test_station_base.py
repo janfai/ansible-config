@@ -59,7 +59,12 @@ class StationBase(unittest.TestCase):
         self.assertEqual(remove["ansible.builtin.apt"]["state"], "absent")
         self.assertTrue(remove["ansible.builtin.apt"]["purge"])
         self.assertTrue(remove["ansible.builtin.apt"]["autoremove"])
-        self.assertEqual(remove["when"][1:], ["'conf=' in station_base_openvpn_safety.stdout_lines", "'vpn=no' in station_base_openvpn_safety.stdout_lines", "'process=no' in station_base_openvpn_safety.stdout_lines"])
+        self.assertEqual(remove["when"][1:], ["'conf=none' in station_base_openvpn_safety.stdout_lines", "'vpn=no' in station_base_openvpn_safety.stdout_lines", "'process=no' in station_base_openvpn_safety.stdout_lines"])
+        command = safety["ansible.builtin.command"]["argv"][-1]
+        self.assertIn("/etc/openvpn/client", command)
+        self.assertIn("/etc/openvpn/server", command)
+        self.assertIn("nmcli -t -f TYPE connection show", command)
+        self.assertIn("pgrep -x openvpn", command)
         self.assertNotIn("network-manager'", remove["ansible.builtin.apt"]["name"])
 
     def test_resume_is_owned_only_by_common(self):
