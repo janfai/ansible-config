@@ -202,7 +202,7 @@
     name: "{{ station_base_absent_packages }}"
     state: absent
     purge: true
-    autoremove: true
+    autoremove: false
   when:
     - station_base_absent_packages | length > 0
     - "'conf=none' in station_base_openvpn_safety.stdout_lines"

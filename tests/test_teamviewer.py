@@ -36,7 +36,8 @@ class TeamViewer(unittest.TestCase):
         roles = playbook[0]["roles"]
         teamviewer = next(r for r in roles if isinstance(r, dict) and r.get("role") == "teamviewer")
         self.assertTrue(host["teamviewer_enabled"])
-        self.assertEqual(host["station_base_absent_packages"], ["network-manager-openvpn-gnome", "network-manager-openvpn", "openvpn", "virtualbox-qt", "virtualbox-dkms", "virtualbox"])
+        self.assertEqual(host["station_base_absent_packages"][:6], ["network-manager-openvpn-gnome", "network-manager-openvpn", "openvpn", "virtualbox-qt", "virtualbox-dkms", "virtualbox"])
+        self.assertIn("skypeforlinux", host["station_base_absent_packages"])
         self.assertEqual(teamviewer["teamviewer_enabled"], "{{ station_config.teamviewer_enabled | default(false) }}")
 
 

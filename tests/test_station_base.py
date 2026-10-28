@@ -66,7 +66,7 @@ class StationBase(unittest.TestCase):
         self.assertFalse(safety["check_mode"])
         self.assertEqual(remove["ansible.builtin.apt"]["state"], "absent")
         self.assertTrue(remove["ansible.builtin.apt"]["purge"])
-        self.assertTrue(remove["ansible.builtin.apt"]["autoremove"])
+        self.assertFalse(remove["ansible.builtin.apt"]["autoremove"])
         self.assertEqual(remove["when"][1:], ["'conf=none' in station_base_openvpn_safety.stdout_lines", "'vpn=no' in station_base_openvpn_safety.stdout_lines", "'process=no' in station_base_openvpn_safety.stdout_lines"])
         command = safety["ansible.builtin.command"]["argv"][-1]
         self.assertIn("/etc/openvpn/client", command)

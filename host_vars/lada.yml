@@ -11,3 +11,18 @@ station_base_absent_packages:
   - virtualbox-qt
   - virtualbox-dkms
   - virtualbox
+  - skypeforlinux
+  - pidgin
+  - hexchat
+  - brasero
+  - cheese
+  - totem
+  - qt5-assistant
+  - qttools5-dev-tools
+  - openjdk-8-jre
+  - openjdk-8-jre-headless
+  - openjdk-11-jre
+  - openjdk-11-jre-headless
+  - openjdk-21-jre
+  - openjdk-21-jre-headless
+  - ddclient
