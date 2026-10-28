@@ -87,6 +87,14 @@
     - src: ansible-pull-succeeded
       dest: /usr/local/sbin/ansible-pull-succeeded
 
+- name: Nainstalovat pomocnou funkci identity stanice
+  ansible.builtin.copy:
+    src: station_mail_identity.py
+    dest: /usr/local/sbin/station_mail_identity.py
+    owner: root
+    group: root
+    mode: '0644'
+
 - name: Nainstalovat jednotky pro upozornění při chybě
   ansible.builtin.copy:
     src: ansible-pull-failure.service

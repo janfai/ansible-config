@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from station_mail_identity import station_identity
 
 station = os.environ.get('STANICE_REPORT_STATION_ID') or Path('/etc/ansible/station-id').read_text().strip()
 settings_path = os.environ.get('STANICE_REPORT_SETTINGS', '/etc/ansible/reporting.json')
@@ -336,8 +337,8 @@ def git_publish(root, timestamp, json_path, md_path):
 def send(recipients, subject, body):
     message = email.message.EmailMessage()
     message['To'] = ', '.join(recipients)
-    message['Subject'] = subject
-    message.set_content(body)
+    message['Subject'] = f'[{station}] {subject}'
+    message.set_content(f'{body.rstrip()}\n\n{station_identity(station)}')
     subprocess.run(['/usr/sbin/sendmail', '-t'], input=message.as_bytes(), check=True)
 
 def report():

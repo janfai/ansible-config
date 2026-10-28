@@ -2,6 +2,7 @@
 import json
 import subprocess
 from pathlib import Path
+from station_mail_identity import station_identity
 
 state_path = Path('/var/lib/stanice/ansible-pull-failures')
 try:
@@ -16,5 +17,7 @@ if count == 3:
     signature = settings['admin_signature']
     reason_path = Path('/var/lib/stanice/ansible-pull-failure-reason')
     reason = reason_path.read_text().strip() if reason_path.exists() else 'Stažení nebo použití správy selhalo.'
-    mail = f"To: {settings['admin_email']}, {settings['user_email']}\nSubject: Stanice nemohla stáhnout konfiguraci\nContent-Type: text/plain; charset=UTF-8\n\nAhoj, stanici se třikrát nepodařilo stáhnout a použít správu.\nDůvod posledního selhání: {reason}\nOzvu se ti.\n\n{signature}\n"
+    station_id = Path('/etc/ansible/station-id').read_text().strip()
+    identity = station_identity(station_id)
+    mail = f"To: {settings['admin_email']}, {settings['user_email']}\nSubject: [{station_id}] Stanice nemohla stáhnout konfiguraci\nContent-Type: text/plain; charset=UTF-8\n\nAhoj, stanici se třikrát nepodařilo stáhnout a použít správu.\nDůvod posledního selhání: {reason}\nOzvu se ti.\n\n{identity}\n\n{signature}\n"
     subprocess.run(['/usr/sbin/sendmail', '-t'], input=mail.encode(), check=True)

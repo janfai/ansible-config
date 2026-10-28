@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import fcntl
 import http.client
+import ipaddress
 import os
 import pwd
 import random
@@ -163,7 +164,10 @@ def say(recipient, body):
     conf = config()
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}|jan", recipient):
         raise ValueError("Neplatný adresát")
-    if not isinstance(body, str) or not body.strip() or len(body.encode("utf-8")) > 16384:
+    if not isinstance(body, str) or not body.strip():
+        raise ValueError("Tělo musí mít 1 až 16384 bajtů")
+    body = body.rstrip() + "\n\n" + station_identity(conf["id"])
+    if len(body.encode("utf-8")) > 16384:
         raise ValueError("Tělo musí mít 1 až 16384 bajtů")
     repo = Path(conf["repo"])
     message_id = f"{conf['id']}-{int(time.time())}-{os.urandom(4).hex()}"
@@ -173,6 +177,33 @@ def say(recipient, body):
     write_json(path, message)
     push(repo, "guardian: board message " + message_id)
     return message_id
+
+
+def station_identity(station_id):
+    hostname = "nezjištěno"
+    try:
+        hostname = subprocess.run(["hostname", "-f"], check=True, capture_output=True, text=True, timeout=5).stdout.strip() or hostname
+    except (OSError, subprocess.SubprocessError):
+        pass
+    ipv4 = "nezjištěna"
+    interface = ""
+    try:
+        route = subprocess.run(["ip", "-4", "route", "get", "1.1.1.1"], check=True, capture_output=True, text=True, timeout=5).stdout.split()
+        ipv4 = route[route.index("src") + 1]
+        interface = route[route.index("dev") + 1]
+        if not ipaddress.ip_address(ipv4).version == 4:
+            ipv4 = "nezjištěna"
+            interface = ""
+    except (OSError, subprocess.SubprocessError, ValueError, IndexError):
+        pass
+    mac = "nezjištěna"
+    if interface:
+        try:
+            mac = Path(f"/sys/class/net/{interface}/address").read_text().strip() or mac
+        except OSError:
+            pass
+    timestamp = datetime.now().astimezone().isoformat(timespec="seconds")
+    return "\n".join((f"Stanice: {station_id}", f"Hostname: {hostname}", f"IP: {ipv4}", f"MAC: {mac}", f"Čas stanice: {timestamp}"))
 
 
 def trim(text):
