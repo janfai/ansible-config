@@ -1,0 +1,15 @@
+---
+- name: Nainstalovat základní provozní nástroje všech stanic
+  ansible.builtin.apt:
+    name: "{{ base_tools_packages + base_tools_extra_packages }}"
+    state: present
+  when: base_tools_enabled | bool
+
+- name: Nastavit needrestart jen na výpis, bez automatických restartů služeb
+  ansible.builtin.copy:
+    dest: /etc/needrestart/conf.d/50-ansible-list-only.conf
+    content: "$nrconf{restart} = 'l';\n"
+    owner: root
+    group: root
+    mode: '0644'
+  when: base_tools_enabled | bool and 'needrestart' in (base_tools_packages + base_tools_extra_packages)

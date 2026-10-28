@@ -16,7 +16,7 @@ class StationBase(unittest.TestCase):
     def test_role_is_in_station_playbook_after_common(self):
         playbook = yaml.safe_load((BASE / "local.yml").read_text())
         roles = [r if isinstance(r, str) else r["role"] for r in playbook[0]["roles"]]
-        self.assertEqual(roles.index("station_base"), roles.index("common") + 1)
+        self.assertGreater(roles.index("station_base"), roles.index("common"))
 
     def test_absent_packages_are_passed_from_station_config(self):
         playbook = yaml.safe_load((BASE / "local.yml").read_text())

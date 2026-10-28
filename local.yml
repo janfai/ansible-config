@@ -96,6 +96,9 @@
       no_log: true
   roles:
     - common
+    - role: base_tools
+      base_tools_enabled: "{{ station_config.base_tools_enabled | default(true) }}"
+      base_tools_extra_packages: "{{ station_config.base_tools_extra_packages | default([]) }}"
     - role: station_base
       station_base_absent_packages: "{{ station_config.station_base_absent_packages | default([]) }}"
     - role: teamviewer

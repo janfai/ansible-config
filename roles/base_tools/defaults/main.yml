@@ -1,0 +1,42 @@
+---
+base_tools_enabled: true
+base_tools_packages:
+  - apt-utils
+  - aptitude
+  - less
+  - lsof
+  - time
+  - mtr-tiny
+  - ncdu
+  - whois
+  - hwinfo
+  - traceroute
+  - lshw
+  - inxi
+  - procinfo
+  - vim
+  - nmap
+  - htop
+  - btop
+  - atop
+  - iotop
+  - iftop
+  - iptraf-ng
+  - ipcalc
+  - mc
+  - screen
+  - tmux
+  - links
+  - ethtool
+  - usbutils
+  - pciutils
+  - lm-sensors
+  - smartmontools
+  - hdparm
+  - parted
+  - fsarchiver
+  - sysstat
+  - speedometer
+  - p7zip-full
+  - needrestart
+base_tools_extra_packages: []
