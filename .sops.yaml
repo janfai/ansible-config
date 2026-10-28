@@ -1,9 +1,9 @@
 ---
 creation_rules:
-  - path_regex: "^secrets/lada\.enc\.yaml$"
+  - path_regex: '^secrets/lada\.enc\.yaml$'
     age: >-
       age1wvl3m4stf3rccpt634jlvyyqlqaqexnq39egzxg7870hexehz37syw7ffx,age1z0c4ha97umqy9ted6h3s5z4c3ap598urhl4fj9pwjw3umg2a0ygqgf076h
-  - path_regex: "^host_vars/lada\.sops\.yaml$"
+  - path_regex: '^host_vars/lada\.sops\.yaml$'
     age: >-
       age1wvl3m4stf3rccpt634jlvyyqlqaqexnq39egzxg7870hexehz37syw7ffx,age1z0c4ha97umqy9ted6h3s5z4c3ap598urhl4fj9pwjw3umg2a0ygqgf076h
   - path_regex: secrets/.*\.enc\.yaml$
