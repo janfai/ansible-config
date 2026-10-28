@@ -136,6 +136,7 @@
   when: guardian_enabled | bool
 
 - name: Zapsat konfiguraci Guardiana
+  notify: Restartovat Guardiana
   no_log: true
   ansible.builtin.copy:
     dest: /etc/upgrade-guardian/config.json
