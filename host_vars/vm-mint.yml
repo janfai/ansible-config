@@ -1,7 +1,7 @@
 ---
 inventory_enabled: false
 ansible_pull_branch: staging
-guardian_enabled: true
+guardian_enabled: false
 guardian_git_enabled: true
 guardian_provider: none
 guardian_station_id: vm-mint
