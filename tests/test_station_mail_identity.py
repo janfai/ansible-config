@@ -1,4 +1,5 @@
 import importlib.util
+import hashlib
 import re
 import subprocess
 import unittest
@@ -13,6 +14,13 @@ SPEC.loader.exec_module(IDENTITY)
 
 
 class StationMailIdentity(unittest.TestCase):
+    def test_guardian_manifest_matches_runtime_files(self):
+        manifest = BASE / "roles/guardian/files/MANIFEST"
+        for line in manifest.read_text().splitlines():
+            digest, name = line.split(maxsplit=1)
+            actual = hashlib.sha256((manifest.parent / name).read_bytes()).hexdigest()
+            self.assertEqual(actual, digest, name)
+
     def test_identity_uses_primary_route_and_contains_all_fields(self):
         hostname = subprocess.CompletedProcess([], 0, "vm-mint.example.test\n", "")
         route = subprocess.CompletedProcess([], 0, "1.1.1.1 via 192.0.2.1 dev enp1s0 src 192.0.2.55 uid 0\n", "")
