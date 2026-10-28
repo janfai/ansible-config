@@ -589,7 +589,7 @@ def dispatch_codex(repo, task, state, signed):
         return "no-agent", {}
     env["CODEX_HOME"] = str(codex_home)
     env["SHELL"] = "/bin/bash"
-    argv = [executable, "exec", "--json", *codex_sandbox(task, signed), "--ask-for-approval", "never", "--skip-git-repo-check"]
+    argv = [executable, "exec", "--json", *codex_sandbox(task, signed), "--skip-git-repo-check"]
     resume = state.get("codex_thread_id")
     argv.extend(["resume", str(resume), prompt] if resume else [prompt])
     try:
