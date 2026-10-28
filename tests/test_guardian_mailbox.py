@@ -42,7 +42,7 @@ class Mailbox(unittest.TestCase):
                 if 'ansible.builtin.command' not in task:
                     continue
                 argv = task['ansible.builtin.command']['argv']
-                argv = [str(x).replace('/var/lib/upgrade-guardian/repo', str(station)) for x in argv]
+                argv = [str(x).replace('/var/lib/guardian/repo', str(station)) for x in argv]
                 argv = [str(bare) if x.startswith('guardian-git-vps:') else x for x in argv]
                 subprocess.run(argv, check=True, capture_output=True)
             self.assertEqual(saved.read_text(), '{"status":"ok"}')

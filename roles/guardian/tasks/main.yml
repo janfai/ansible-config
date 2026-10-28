@@ -42,6 +42,45 @@
   no_log: true
   when: guardian_enabled | bool
 
+- name: Zastavit jednotku před migrací starých cest
+  ansible.builtin.systemd:
+    name: upgrade-guardian.service
+    state: stopped
+  failed_when: false
+  when: guardian_enabled | bool
+
+- name: Načíst stav jednotek před přesunem dat
+  ansible.builtin.service_facts:
+  when: guardian_enabled | bool
+
+- name: Zastavit migraci, pokud stará služba stále běží
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.services.get('upgrade-guardian.service', {}).get('state', 'stopped') != 'running'
+    fail_msg: Stará služba Guardianu stále běží; adresáře nebyly přesunuty.
+  when: guardian_enabled | bool
+
+- name: Přesunout staré adresáře Guardiana bez slučování kolizních dat
+  ansible.builtin.shell: |
+    set -eu
+    changed=0
+    for pair in /opt/upgrade-guardian:/opt/guardian /etc/upgrade-guardian:/etc/guardian /var/lib/upgrade-guardian:/var/lib/guardian; do
+      old=${pair%%:*}
+      new=${pair#*:}
+      if [ -e "$old" ]; then
+        if [ -e "$new" ]; then
+          printf 'kolize: %s a %s současně existují\n' "$old" "$new" >&2
+          exit 42
+        fi
+        mv -- "$old" "$new"
+        changed=1
+      fi
+    done
+    if [ "$changed" -eq 1 ]; then printf migrated; else printf unchanged; fi
+  register: guardian_legacy_migration
+  changed_when: "'migrated' in guardian_legacy_migration.stdout"
+  when: guardian_enabled | bool
+
 - name: Vytvořit systémový účet Guardiana
   ansible.builtin.user:
     name: guardian-agent
@@ -60,16 +99,16 @@
     group: "{{ item.group }}"
     mode: "{{ item.mode }}"
   loop:
-    - {path: /opt/upgrade-guardian, owner: root, group: root, mode: '0755'}
-    - {path: /etc/upgrade-guardian, owner: root, group: root, mode: '0750'}
-    - path: /var/lib/upgrade-guardian
+    - {path: /opt/guardian, owner: root, group: root, mode: '0755'}
+    - {path: /etc/guardian, owner: root, group: root, mode: '0750'}
+    - path: /var/lib/guardian
       owner: "{{ 'guardian-agent' if guardian_provider != 'none' else 'root' }}"
       group: "{{ 'guardian-agent' if guardian_provider != 'none' else 'root' }}"
       mode: '0700'
-    - {path: /var/lib/upgrade-guardian/repo, owner: root, group: root, mode: '0755'}
-    - {path: /var/lib/upgrade-guardian/repo/tasks/pending, owner: root, group: root, mode: '0755'}
-    - {path: /var/lib/upgrade-guardian/repo/results, owner: root, group: root, mode: '0755'}
-    - {path: /var/lib/upgrade-guardian/repo/hb, owner: root, group: root, mode: '0755'}
+    - {path: /var/lib/guardian/repo, owner: root, group: root, mode: '0755'}
+    - {path: /var/lib/guardian/repo/tasks/pending, owner: root, group: root, mode: '0755'}
+    - {path: /var/lib/guardian/repo/results, owner: root, group: root, mode: '0755'}
+    - {path: /var/lib/guardian/repo/hb, owner: root, group: root, mode: '0755'}
   when: guardian_enabled | bool
 
 - name: Vytvořit domovy agenta
@@ -102,7 +141,7 @@
 - name: Zkopírovat runtime Guardiana
   ansible.builtin.copy:
     src: guardian
-    dest: /opt/upgrade-guardian/guardian
+    dest: /opt/guardian/guardian
     owner: root
     group: root
     mode: '0755'
@@ -115,7 +154,7 @@
     - name: Stáhnout připnutý archiv Codex CLI
       ansible.builtin.get_url:
         url: https://github.com/openai/codex/releases/download/rust-v0.164.0/codex-x86_64-unknown-linux-musl.tar.gz
-        dest: /opt/upgrade-guardian/codex.tar.gz
+        dest: /opt/guardian/codex.tar.gz
         checksum: sha256:90dd0b03b28afcb7fa733a4f73b413db2916a47347efd43fb669cc1c774ee8e4
         mode: '0644'
 
@@ -129,13 +168,13 @@
 
     - name: Rozbalit Codex CLI
       ansible.builtin.unarchive:
-        src: /opt/upgrade-guardian/codex.tar.gz
-        dest: /opt/upgrade-guardian
+        src: /opt/guardian/codex.tar.gz
+        dest: /opt/guardian
         remote_src: true
 
     - name: Instalovat Codex CLI
       ansible.builtin.copy:
-        src: /opt/upgrade-guardian/codex-x86_64-unknown-linux-musl
+        src: /opt/guardian/codex-x86_64-unknown-linux-musl
         dest: "{{ guardian_home }}/.local/bin/codex"
         remote_src: true
         owner: guardian-agent
@@ -176,7 +215,7 @@
 
 - name: Zapsat veřejný klíč mastera pro ověřování podpisů
   ansible.builtin.copy:
-    dest: /etc/upgrade-guardian/allowed_signers
+    dest: /etc/guardian/allowed_signers
     content: |
       {{ guardian_allowed_signers | trim }}
       router namespaces="guardian-board" {{ guardian_allowed_signers | regex_search('ssh-ed25519 [A-Za-z0-9+/=]+') }}
@@ -187,7 +226,7 @@
 
 - name: Zapsat HMAC klíč stanice
   ansible.builtin.copy:
-    dest: /etc/upgrade-guardian/station.key
+    dest: /etc/guardian/station.key
     content: "{{ guardian_hmac_key | trim }}\n"
     owner: root
     group: root
@@ -199,7 +238,7 @@
   notify: Restartovat Guardiana
   no_log: true
   ansible.builtin.copy:
-    dest: /etc/upgrade-guardian/config.json
+    dest: /etc/guardian/config.json
     content: "{{ guardian_config | to_nice_json }}\n"
     owner: root
     group: root
@@ -208,14 +247,15 @@
     guardian_config:
       id: "{{ guardian_station_id }}"
       signer: "{{ guardian_signer }}"
-      repo: /var/lib/upgrade-guardian/repo
-      host_key: /etc/upgrade-guardian/station_ed25519
+      repo: /var/lib/guardian/repo
+      host_key: /etc/guardian/station_ed25519
       last_git_sync: never
       relay_url: "{{ guardian_relay_url | default(guardian_secrets.relay_url, true) }}"
-      relay_key_file: /etc/upgrade-guardian/station.key
+      relay_key_file: /etc/guardian/station.key
       agent_provider: "{{ guardian_provider }}"
       agent_profile: temporary
-      agent_workdir: /var/lib/upgrade-guardian/agent-work
+      mode: "{{ guardian_mode }}"
+      agent_workdir: /var/lib/guardian/agent-work
       codex_home: "{{ guardian_codex_home }}"
       camouflage: false
       relay_legacy_auth: "{{ station_config.guardian_relay_legacy_auth | default(false) }}"
@@ -223,8 +263,8 @@
 
 - name: Instalovat systemd unit Guardiana
   ansible.builtin.copy:
-    src: upgrade-guardian.service
-    dest: /etc/systemd/system/upgrade-guardian.service
+    src: guardian.service
+    dest: /etc/systemd/system/guardian.service
     owner: root
     group: root
     mode: '0644'
@@ -233,44 +273,92 @@
 
 - name: Povolit a spustit Guardiana
   ansible.builtin.systemd:
-    name: upgrade-guardian.service
+    name: guardian.service
     enabled: true
     state: started
     daemon_reload: true
   when: guardian_enabled | bool
 
+- name: Načíst stav nové služby před odstraněním staré jednotky
+  ansible.builtin.service_facts:
+  when: guardian_enabled | bool
+
+- name: Ověřit aktivní novou službu před odstraněním staré jednotky
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.services.get('guardian.service', {}).get('state') == 'running'
+    fail_msg: Nová služba Guardianu neběží; stará jednotka zůstává nedotčena.
+  when: guardian_enabled | bool
+
+- name: Zakázat starou jednotku po startu nové
+  ansible.builtin.systemd:
+    name: upgrade-guardian.service
+    enabled: false
+    state: stopped
+  failed_when: false
+  when: guardian_enabled | bool
+
+- name: Odstranit starý unit po ověřeném startu nové služby
+  ansible.builtin.file:
+    path: /etc/systemd/system/upgrade-guardian.service
+    state: absent
+  notify: Restartovat Guardiana
+  when: guardian_enabled | bool
+
 - name: Zjistit dostupnost Codex CLI před retire
   ansible.builtin.stat:
-    path: "{{ guardian_home }}/.local/bin/codex"
+    path: "{{ item }}"
+  loop:
+    - /var/lib/guardian/agent-home/.local/bin/codex
+    - /var/lib/upgrade-guardian/agent-home/.local/bin/codex
   register: guardian_retire_codex
   when: not (guardian_enabled | bool)
 
 - name: Odhlásit Codex před odstraněním profilu
   ansible.builtin.command:
     argv:
-      - "{{ guardian_home }}/.local/bin/codex"
+      - "{{ item.item }}"
       - logout
   become: true
   become_user: guardian-agent
   environment:
-    HOME: "{{ guardian_home }}"
-    CODEX_HOME: "{{ guardian_codex_home }}"
+    HOME: "{{ item.item | regex_replace('/.local/bin/codex$', '') }}"
+    CODEX_HOME: "{{ item.item | regex_replace('/agent-home/.local/bin/codex$', '/codex-home') }}"
   no_log: true
   changed_when: true
-  when: not (guardian_enabled | bool) and guardian_retire_codex.stat.exists
+  loop: "{{ guardian_retire_codex.results | default([]) }}"
+  when: not (guardian_enabled | bool) and item.stat.exists
 
-- name: Zakázat a zastavit dřívější Guardian
+- name: Zakázat a zastavit nové i staré služby před retire
   ansible.builtin.systemd:
-    name: upgrade-guardian.service
+    name: "{{ item }}"
     enabled: false
     state: stopped
+  loop:
+    - guardian.service
+    - upgrade-guardian.service
   failed_when: false
   when: not (guardian_enabled | bool)
 
-- name: Odstranit unit Guardiana
+- name: Načíst stavy služeb před retire
+  ansible.builtin.service_facts:
+  when: not (guardian_enabled | bool)
+
+- name: Zastavit retire, pokud některá služba stále běží
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.services.get('guardian.service', {}).get('state', 'stopped') != 'running'
+      - ansible_facts.services.get('upgrade-guardian.service', {}).get('state', 'stopped') != 'running'
+    fail_msg: Služba Guardianu stále běží; data nebyla odstraněna.
+  when: not (guardian_enabled | bool)
+
+- name: Odstranit nové i staré unity Guardiana
   ansible.builtin.file:
-    path: /etc/systemd/system/upgrade-guardian.service
+    path: "{{ item }}"
     state: absent
+  loop:
+    - /etc/systemd/system/guardian.service
+    - /etc/systemd/system/upgrade-guardian.service
   when: not (guardian_enabled | bool)
 
 - name: Znovu načíst systemd po odstranění unitu
@@ -295,6 +383,9 @@
     path: "{{ item }}"
     state: absent
   loop:
+    - /opt/guardian
+    - /etc/guardian
+    - /var/lib/guardian
     - /opt/upgrade-guardian
     - /etc/upgrade-guardian
     - /var/lib/upgrade-guardian

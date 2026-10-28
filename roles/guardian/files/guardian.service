@@ -1,0 +1,22 @@
+[Unit]
+Description=Guardian communication service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/opt/guardian/guardian
+Restart=always
+RestartSec=30
+User=root
+Group=root
+WorkingDirectory=/var/lib/guardian
+Environment=PYTHONUNBUFFERED=1
+Environment=PATH=/var/lib/guardian/agent-home/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=false
+ReadWritePaths=/etc/guardian /var/lib/guardian /opt/guardian
+
+[Install]
+WantedBy=multi-user.target

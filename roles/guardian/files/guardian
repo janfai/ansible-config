@@ -24,10 +24,20 @@ from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
 
-ROOT = Path(os.environ.get("UPGRADE_GUARDIAN_ROOT", "/"))
-ETC = Path(os.environ.get("UPGRADE_GUARDIAN_ETC", ROOT / "etc/upgrade-guardian"))
-OPT = Path(os.environ.get("UPGRADE_GUARDIAN_OPT", ROOT / "opt/upgrade-guardian"))
-VAR = Path(os.environ.get("UPGRADE_GUARDIAN_VAR", ROOT / "var/lib/upgrade-guardian"))
+for _key, _value in list(os.environ.items()):
+    if _key.startswith("GUARDIAN_"):
+        os.environ["UPGRADE_GUARDIAN_" + _key[len("GUARDIAN_"):]] = _value
+
+ROOT = Path(os.environ.get("GUARDIAN_ROOT", os.environ.get("UPGRADE_GUARDIAN_ROOT", "/")))
+def _directory(new, old):
+    preferred = ROOT / new
+    legacy = ROOT / old
+    preferred_has_data = preferred.is_dir() and next(preferred.iterdir(), None) is not None
+    legacy_has_data = legacy.is_dir() and next(legacy.iterdir(), None) is not None
+    return preferred if preferred_has_data or not legacy.exists() else legacy if legacy_has_data or not preferred.exists() else preferred
+ETC = Path(os.environ.get("GUARDIAN_ETC", os.environ.get("UPGRADE_GUARDIAN_ETC", _directory("etc/guardian", "etc/upgrade-guardian"))))
+OPT = Path(os.environ.get("GUARDIAN_OPT", os.environ.get("UPGRADE_GUARDIAN_OPT", _directory("opt/guardian", "opt/upgrade-guardian"))))
+VAR = Path(os.environ.get("GUARDIAN_VAR", os.environ.get("UPGRADE_GUARDIAN_VAR", _directory("var/lib/guardian", "var/lib/upgrade-guardian"))))
 NO_SYSTEMD = os.environ.get("UPGRADE_GUARDIAN_NO_SYSTEMD") == "1"
 LIMIT = 65536
 AGENT_PROCESS = None
@@ -48,7 +58,7 @@ def now():
 def run(argv, timeout=30, input_text=None, env=None):
     if argv and argv[0] == "git":
         env = dict(os.environ if env is None else env)
-        env.setdefault("GIT_SSH_COMMAND", "ssh -F /etc/upgrade-guardian/ssh_config")
+        env.setdefault("GIT_SSH_COMMAND", f"ssh -F {ETC / 'ssh_config'}")
         with GIT_LOCK:
             return run_process(argv, timeout, input_text, env)
     return run_process(argv, timeout, input_text, env)
@@ -68,7 +78,15 @@ def run_process(argv, timeout, input_text, env):
 
 
 def config():
-    return json.loads((ETC / "config.json").read_text(encoding="utf-8"))
+    path = ETC / "config.json"
+    legacy = ROOT / "etc/upgrade-guardian/config.json"
+    if not path.is_file() and legacy.is_file():
+        path = legacy
+    value = json.loads(path.read_text(encoding="utf-8"))
+    value.setdefault("mode", "temporary")
+    if value["mode"] not in ("temporary", "permanent"):
+        raise ValueError("mode musí být temporary nebo permanent")
+    return value
 
 
 def git(repo, *args):
@@ -85,7 +103,7 @@ def sync(repo):
         if code not in (0, 1):
             raise RuntimeError("nelze zjistit lokální změny před synchronizací")
         if code == 1:
-            git(repo, "-c", "user.name=upgrade-guardian", "-c", "user.email=guardian@localhost", "commit", "-m", "guardian: local working tree sync")
+            git(repo, "-c", "user.name=guardian", "-c", "user.email=guardian@localhost", "commit", "-m", "guardian: local working tree sync")
         try:
             git(repo, "pull", "--rebase", "origin", "master")
         except RuntimeError:
@@ -100,7 +118,7 @@ def push(repo, message):
         if code not in (0, 1):
             raise RuntimeError(out[-2000:])
         if code == 1:
-            git(repo, "-c", "user.name=upgrade-guardian", "-c", "user.email=guardian@localhost", "commit", "-m", message)
+            git(repo, "-c", "user.name=guardian", "-c", "user.email=guardian@localhost", "commit", "-m", message)
         try:
             git(repo, "push", "origin", "master")
         except RuntimeError as exc:
@@ -111,7 +129,7 @@ def push(repo, message):
             git(repo, "push", "origin", "master")
 
 
-def verify_signer(path, namespace="upgrade-guardian", principals=None):
+def verify_signer(path, namespace="guardian", principals=None):
     sig = Path(str(path) + ".sig")
     if not sig.exists():
         return None
@@ -119,12 +137,16 @@ def verify_signer(path, namespace="upgrade-guardian", principals=None):
     identities = principals if principals is not None else conf.get("signers", [conf.get("signer", "")])
     if isinstance(identities, str):
         identities = [identities]
+    namespaces = [namespace]
+    if namespace == "guardian":
+        namespaces.append("upgrade-guardian")
     for identity in identities:
         if not identity:
             continue
-        code, _ = run(["ssh-keygen", "-Y", "verify", "-f", str(ETC / "allowed_signers"), "-I", identity, "-n", namespace, "-s", str(sig)], timeout=15, input_text=path.read_text(encoding="utf-8"))
-        if code == 0:
-            return identity
+        for signed_namespace in namespaces:
+            code, _ = run(["ssh-keygen", "-Y", "verify", "-f", str(ETC / "allowed_signers"), "-I", identity, "-n", signed_namespace, "-s", str(sig)], timeout=15, input_text=path.read_text(encoding="utf-8"))
+            if code == 0:
+                return identity
     return None
 
 
@@ -264,7 +286,7 @@ def publish_busy(conf, repo, task_id, task_type, started_at, started_mono, outpu
             if code not in (0, 1):
                 raise RuntimeError(output[-1000:])
             if code == 1:
-                git(repo, "-c", "user.name=upgrade-guardian", "-c", "user.email=guardian@localhost", "commit", "-m", "guardian: busy heartbeat " + conf["id"])
+                git(repo, "-c", "user.name=guardian", "-c", "user.email=guardian@localhost", "commit", "-m", "guardian: busy heartbeat " + conf["id"])
             try:
                 git(repo, "push", "origin", "master")
             except RuntimeError as exc:
@@ -557,7 +579,16 @@ def acquire_execution_lease(directory, task_id, blocking=False):
     return task, global_lock
 
 
+def guardian_mode():
+    try:
+        return config().get("mode", "temporary")
+    except FileNotFoundError:
+        return "temporary"
+
+
 def task_time_error(task):
+    if guardian_mode() == "permanent":
+        return None
     if not task.get("expires_at"):
         return "úkolu chybí povinné expires_at"
     build_year = datetime.fromtimestamp(Path(__file__).stat().st_mtime, timezone.utc).year
@@ -598,23 +629,28 @@ def uninstall(repo, task_id, final):
     write_json(repo / "results" / ("final-" + task_id + ".json"), final)
     push(repo, "guardian: final report " + task_id)
     if not NO_SYSTEMD:
-        cleanup = Path("/run/upgrade-guardian-retire.sh")
+        cleanup = Path("/run/guardian-retire.sh")
         key = Path(conf_key_path())
         commands = retire_cleanup_commands(OPT, ETC, VAR, key, cleanup, str(config().get("id", "")))
         cleanup.write_text("#!/bin/sh\nset -eu\n" + "\n".join(commands) + "\n", encoding="utf-8")
         cleanup.chmod(0o700)
-        code, output = run(["systemd-run", "--unit=upgrade-guardian-retire", "--on-active=5s", "--collect", "/bin/sh", str(cleanup)], timeout=30)
+        code, output = run(["systemd-run", "--unit=guardian-retire", "--on-active=5s", "--collect", "/bin/sh", str(cleanup)], timeout=30)
         if code:
             raise RuntimeError("Nelze naplánovat odinstalaci: " + trim(output))
         return
     key = Path(conf_key_path())
     ident = str(config().get("id", ""))
-    shutil.rmtree(OPT, ignore_errors=True)
-    shutil.rmtree(ETC, ignore_errors=True)
-    shutil.rmtree(VAR, ignore_errors=True)
+    for directory in (OPT, ETC, VAR, ROOT / "opt/guardian", ROOT / "etc/guardian", ROOT / "var/lib/guardian", ROOT / "opt/upgrade-guardian", ROOT / "etc/upgrade-guardian", ROOT / "var/lib/upgrade-guardian"):
+        shutil.rmtree(directory, ignore_errors=True)
+    if not NO_SYSTEMD:
+        run(["systemctl", "disable", "--now", "guardian.service"], timeout=30)
+        run(["systemctl", "disable", "--now", "upgrade-guardian.service"], timeout=30)
+        run(["systemctl", "daemon-reload"], timeout=30)
+        Path("/etc/systemd/system/guardian.service").unlink(missing_ok=True)
+        Path("/etc/systemd/system/upgrade-guardian.service").unlink(missing_ok=True)
     key.unlink(missing_ok=True)
     Path(str(key) + ".pub").unlink(missing_ok=True)
-    for pattern in (f"upgrade-guardian-{ident}*", f"guardian-gate-{ident}"):
+    for pattern in (f"guardian-{ident}*", f"upgrade-guardian-{ident}*", f"guardian-gate-{ident}"):
         for path in Path("/tmp").glob(pattern):
             shutil.rmtree(path, ignore_errors=True) if path.is_dir() else path.unlink(missing_ok=True)
     if os.environ.get("UPGRADE_GUARDIAN_TESTING") != "1":
@@ -623,13 +659,13 @@ def uninstall(repo, task_id, final):
 
 def retire_cleanup_commands(opt, etc, var, key, cleanup, station_id):
     return [
-            "systemctl disable --now upgrade-guardian.service",
-            f"rm -rf {shlex.quote(str(opt))} {shlex.quote(str(etc))} {shlex.quote(str(var))}",
-            f"rm -f {shlex.quote(str(key))} {shlex.quote(str(key) + '.pub')} /etc/systemd/system/upgrade-guardian.service",
+            "if systemctl list-unit-files guardian.service --no-legend | grep -q guardian.service; then systemctl disable --now guardian.service; else systemctl disable --now upgrade-guardian.service; fi",
+            f"rm -rf {shlex.quote(str(opt))} {shlex.quote(str(etc))} {shlex.quote(str(var))} /opt/guardian /etc/guardian /var/lib/guardian /opt/upgrade-guardian /etc/upgrade-guardian /var/lib/upgrade-guardian",
+            f"rm -f {shlex.quote(str(key))} {shlex.quote(str(key) + '.pub')} /etc/systemd/system/guardian.service /etc/systemd/system/upgrade-guardian.service",
             "systemctl daemon-reload",
             f"rm -f {shlex.quote(str(cleanup))}",
             "userdel -r guardian-agent 2>/dev/null || true",
-            f"rm -rf /tmp/upgrade-guardian-{shlex.quote(str(station_id))}* /tmp/guardian-gate-{shlex.quote(str(station_id))}",
+            f"rm -rf /tmp/guardian-{shlex.quote(str(station_id))}* /tmp/upgrade-guardian-{shlex.quote(str(station_id))}* /tmp/guardian-gate-{shlex.quote(str(station_id))}",
     ]
 
 
@@ -652,7 +688,7 @@ def agent_environment(workdir, provider, task=None):
     env["USER"] = "guardian-agent"
     env["LOGNAME"] = "guardian-agent"
     if provider == "codex":
-        env["PATH"] = f"/var/lib/upgrade-guardian/agent-home/.local/bin:{env.get('PATH', '')}"
+        env["PATH"] = f"{VAR / 'agent-home/.local/bin'}:{env.get('PATH', '')}"
     preexec = None
     if os.environ.get("UPGRADE_GUARDIAN_TESTING") == "1":
         if provider == "codex":
@@ -754,7 +790,7 @@ def codex_sandbox(task, signed):
 def codex_executable():
     executable = shutil.which("codex")
     if not executable:
-        candidate = Path("/var/lib/upgrade-guardian/agent-home/.local/bin/codex")
+        candidate = VAR / "agent-home/.local/bin/codex"
         if candidate.is_file() and os.access(candidate, os.X_OK):
             return str(candidate)
     return executable
@@ -767,7 +803,7 @@ def dispatch_codex(repo, task, state, signed):
         return "no-agent", {}
     task_id = str(task.get("id", ""))
     created_at = task.get("created_at")
-    if created_at:
+    if created_at and guardian_mode() != "permanent":
         try:
             created = datetime.fromisoformat(str(created_at).replace("Z", "+00:00")).timestamp()
             if time.time() - created > 86400:
@@ -923,7 +959,7 @@ def dispatch_agent(repo, task, state, signed=False):
         return "no-agent", {}
     task_id = str(task.get("id", ""))
     created_at = task.get("created_at")
-    if created_at:
+    if created_at and guardian_mode() != "permanent":
         try:
             created = datetime.fromisoformat(str(created_at).replace("Z", "+00:00")).timestamp()
             if time.time() - created > 86400:
@@ -936,8 +972,8 @@ def dispatch_agent(repo, task, state, signed=False):
     done = state.setdefault("agent_done", [])
     if task_id in done:
         return "completed", {"duplicate": True}
-    row = {"id": task_id, "prompt": prompt, "expires": time.time() + 86400, "timeout": min(3600, max(1, int(task.get("timeout", 1200))))}
-    if row["expires"] < time.time():
+    row = {"id": task_id, "prompt": prompt, "expires": None if guardian_mode() == "permanent" else time.time() + 86400, "timeout": min(3600, max(1, int(task.get("timeout", 1200))))}
+    if row["expires"] is not None and row["expires"] < time.time():
         return "timeout", {}
     token = token_path.read_text(encoding="utf-8").strip()
     env = dict(os.environ)

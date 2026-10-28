@@ -23,6 +23,26 @@ class GuardianVendor(unittest.TestCase):
         self.assertIn("guardian_enabled | bool and guardian_provider != 'none'", tasks)
         self.assertIn("agent_provider: \"{{ guardian_provider }}\"", tasks)
         self.assertIn("guardian_provider == 'none'", tasks)
+        self.assertIn("guardian_mode: temporary", defaults)
+        self.assertIn('mode: "{{ guardian_mode }}"', tasks)
+        self.assertIn("guardian.service", tasks)
+
+    def test_legacy_paths_move_before_new_paths_are_created(self):
+        tasks = yaml.safe_load((BASE / "roles/guardian/tasks/main.yml").read_text())
+        migration = next(i for i, task in enumerate(tasks) if task.get("name") == "Přesunout staré adresáře Guardiana bez slučování kolizních dat")
+        create = next(i for i, task in enumerate(tasks) if task.get("name") == "Vytvořit adresáře Guardiana")
+        self.assertLess(migration, create)
+        self.assertIn("mv --", tasks[migration]["ansible.builtin.shell"])
+        self.assertIn("exit 42", tasks[migration]["ansible.builtin.shell"])
+        retire = next(task for task in tasks if task.get("name") == "Odstranit soubory a profily Guardiana")
+        self.assertEqual(set(retire["loop"]), {"/opt/guardian", "/etc/guardian", "/var/lib/guardian", "/opt/upgrade-guardian", "/etc/upgrade-guardian", "/var/lib/upgrade-guardian"})
+
+    def test_new_unit_and_vendor_manifest_match(self):
+        files = BASE / "roles/guardian/files"
+        self.assertTrue((files / "guardian.service").is_file())
+        self.assertFalse((files / "upgrade-guardian.service").exists())
+        result = __import__("subprocess").run(["sha256sum", "--check", "MANIFEST"], cwd=files, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_allowed_signers_template_renders_two_valid_lines(self):
         tasks = yaml.safe_load((BASE / "roles/guardian/tasks/main.yml").read_text())

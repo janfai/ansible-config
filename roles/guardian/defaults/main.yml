@@ -1,6 +1,7 @@
 ---
 guardian_enabled: false
 guardian_provider: none
+guardian_mode: temporary
 guardian_station_id: "{{ station_id }}"
 guardian_legacy_station_id: lada
 guardian_legacy_hmac_key: "{{ guardian_secrets.legacy_hmac_key | default('') }}"
@@ -9,8 +10,8 @@ guardian_codex_version: 0.164.0
 guardian_signer: jan
 guardian_hmac_key: "{{ guardian_secrets.hmac_key }}"
 guardian_allowed_signers: "{{ guardian_secrets.allowed_signers }}"
-guardian_home: /var/lib/upgrade-guardian/agent-home
-guardian_codex_home: /var/lib/upgrade-guardian/codex-home
+guardian_home: /var/lib/guardian/agent-home
+guardian_codex_home: /var/lib/guardian/codex-home
 guardian_git_enabled: false
 guardian_git_host: 178.105.1.151
 guardian_git_port: 10022
