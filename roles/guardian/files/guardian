@@ -69,6 +69,10 @@ def git(repo, *args):
 
 
 def sync(repo):
+    git(repo, "add", "-A")
+    code, _ = run(["git", "-C", str(repo), "diff", "--cached", "--quiet"])
+    if code == 1:
+        git(repo, "-c", "user.name=upgrade-guardian", "-c", "user.email=guardian@localhost", "commit", "-m", "guardian: local working tree sync")
     try:
         git(repo, "pull", "--rebase", "origin", "master")
     except RuntimeError:
