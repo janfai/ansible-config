@@ -29,8 +29,6 @@
       - -f
       - /var/lib/stanice-report/id_ed25519
     creates: /var/lib/stanice-report/id_ed25519
-  register: reporting_ssh_key
-  changed_when: reporting_ssh_key.rc == 0
 
 - name: Nastavit oprávnění reportovacího SSH klíče
   ansible.builtin.file:

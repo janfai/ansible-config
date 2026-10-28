@@ -3,6 +3,7 @@ Description=Pravidelné stažení konfigurace stanice
 
 [Timer]
 OnBootSec=3min
+OnCalendar=*:0/15
 OnUnitActiveSec=15min
 Persistent=true
 RandomizedDelaySec=2min

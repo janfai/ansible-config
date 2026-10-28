@@ -97,6 +97,21 @@
     mode: '0644'
   notify: Načíst systemd
 
+- name: Instalovat systemd timer ansible-pull
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/systemd/ansible-pull.timer"
+    dest: /etc/systemd/system/ansible-pull.timer
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Načíst systemd
+
+- name: Aktivovat pravidelný ansible-pull timer
+  ansible.builtin.systemd:
+    name: ansible-pull.timer
+    enabled: true
+    state: started
+
 - name: Nainstalovat základní balíčky navíc proti čistému Mintu
   ansible.builtin.apt:
     name: "{{ mint_base_packages }}"
