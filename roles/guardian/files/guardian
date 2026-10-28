@@ -34,6 +34,7 @@ RELAY_CONN = None
 RELAY_CONN_CREATED = 0
 RELAY_CONN_LIFETIME = 0
 RELAY_HEARTBEAT_AT = 0
+VERIFIED_SIGNER = None
 
 
 def now():
@@ -85,12 +86,89 @@ def push(repo, message):
     git(repo, "push", "origin", "master")
 
 
-def verify(path):
+def verify_signer(path, namespace="upgrade-guardian", principals=None):
     sig = Path(str(path) + ".sig")
     if not sig.exists():
-        return False
-    code, _ = run(["ssh-keygen", "-Y", "verify", "-f", str(ETC / "allowed_signers"), "-I", config()["signer"], "-n", "upgrade-guardian", "-s", str(sig)], timeout=15, input_text=path.read_text(encoding="utf-8"))
-    return code == 0
+        return None
+    conf = config()
+    identities = principals if principals is not None else conf.get("signers", [conf.get("signer", "")])
+    if isinstance(identities, str):
+        identities = [identities]
+    for identity in identities:
+        if not identity:
+            continue
+        code, _ = run(["ssh-keygen", "-Y", "verify", "-f", str(ETC / "allowed_signers"), "-I", identity, "-n", namespace, "-s", str(sig)], timeout=15, input_text=path.read_text(encoding="utf-8"))
+        if code == 0:
+            return identity
+    return None
+
+
+def verify(path):
+    return verify_signer(path) is not None
+
+
+def board_verify(path):
+    return verify_signer(path, "guardian-board", [config().get("board_router", "router")]) is not None
+
+
+def task_station_mismatch(task, station_id):
+    return "station" in task and task["station"] != station_id
+
+
+def board_receive(repo, conf):
+    inbox = VAR / "board-inbox"
+    inbox.mkdir(parents=True, exist_ok=True)
+    seen = repo / "board/seen"
+    received = 0
+    for path in sorted((repo / "board/in").glob("*.json")):
+        if path.is_symlink():
+            continue
+        if not board_verify(path):
+            continue
+        try:
+            message = json.loads(path.read_text(encoding="utf-8"))
+            if message.get("id") != path.stem or message.get("to") != conf["id"]:
+                continue
+            expiry = datetime.fromisoformat(str(message["expires_at"]).replace("Z", "+00:00"))
+            if expiry.tzinfo is None or expiry.timestamp() <= time.time():
+                continue
+            local = inbox / (path.stem + ".json")
+            if not local.exists():
+                write_json(local, message)
+                write_json(VAR / "outbox/board-in" / (path.stem + ".json"), {"message_id": path.stem, "received_at": now(), "status": "unread"})
+                received += 1
+            seen.mkdir(parents=True, exist_ok=True)
+            destination = seen / path.name
+            if not destination.exists():
+                shutil.move(str(path), str(destination))
+            else:
+                path.unlink(missing_ok=True)
+            sig_path = Path(str(path) + ".sig")
+            if sig_path.exists():
+                seen_sig = Path(str(destination) + ".sig")
+                if not seen_sig.exists():
+                    shutil.move(str(sig_path), str(seen_sig))
+                else:
+                    sig_path.unlink(missing_ok=True)
+        except (OSError, ValueError, KeyError, json.JSONDecodeError):
+            continue
+    return received
+
+
+def say(recipient, body):
+    conf = config()
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}|jan", recipient):
+        raise ValueError("Neplatný adresát")
+    if not isinstance(body, str) or not body.strip() or len(body.encode("utf-8")) > 16384:
+        raise ValueError("Tělo musí mít 1 až 16384 bajtů")
+    repo = Path(conf["repo"])
+    message_id = f"{conf['id']}-{int(time.time())}-{os.urandom(4).hex()}"
+    created = datetime.now(timezone.utc)
+    message = {"id": message_id, "from": conf["id"], "to": recipient, "type": "info", "body": body, "created_at": created.isoformat(), "expires_at": datetime.fromtimestamp(time.time() + 86400, timezone.utc).isoformat()}
+    path = repo / "board/out" / (message_id + ".json")
+    write_json(path, message)
+    push(repo, "guardian: board message " + message_id)
+    return message_id
 
 
 def trim(text):
@@ -145,7 +223,7 @@ def heartbeat(conf):
             code, out = run(["fuser", str(p)], timeout=4)
             locks.append({"path": str(p), "holders": out.strip() if code == 0 else ""})
     reboot = Path("/var/run/reboot-required").exists()
-    return {"id": conf["id"], "time": now(), "hostname": socket.gethostname(), "uptime": uptime[0] if uptime else "", "loadavg": load[0] if load else "", "os_release": osrel, "linuxmint_info": mint, "processes": proc_info(), "locks": locks, "df_root": df("/"), "df_boot": df("/boot"), "reboot_required": reboot, "apt_term_tail": lines(Path("/var/log/apt/term.log")), "dpkg_log_tail": lines(Path("/var/log/dpkg.log")), "network": {"last_git_sync": conf.get("last_git_sync", "unknown")}}
+    return {"id": conf["id"], "time": now(), "hostname": socket.gethostname(), "uptime": uptime[0] if uptime else "", "loadavg": load[0] if load else "", "os_release": osrel, "linuxmint_info": mint, "processes": proc_info(), "locks": locks, "df_root": df("/"), "df_boot": df("/boot"), "reboot_required": reboot, "apt_term_tail": lines(Path("/var/log/apt/term.log")), "dpkg_log_tail": lines(Path("/var/log/dpkg.log")), "network": {"last_git_sync": conf.get("last_git_sync", "unknown")}, "board_pending_out": len(list((Path(conf["repo"]) / "board/out").glob("*.json"))), "board_inbox_unread": len(list((VAR / "board-inbox").glob("*.json")))}
 
 
 def write_json(path, value):
@@ -154,6 +232,8 @@ def write_json(path, value):
 
 
 def result(repo, task_id, status, **extra):
+    if VERIFIED_SIGNER:
+        extra.setdefault("signed_by", VERIFIED_SIGNER)
     data = {"id": task_id, "status": status, "time": now(), **extra}
     write_json(repo / "results" / (task_id + ".json"), data)
     return data
@@ -1110,12 +1190,17 @@ def execute(repo, path, task, state, signed=False):
 
 
 def cycle():
+    global VERIFIED_SIGNER
+    VERIFIED_SIGNER = None
     if (ETC / "DISABLED").exists():
         return
     conf = config()
     repo = Path(conf["repo"])
     recover_interrupted_upgrades(repo, conf)
     sync(repo)
+    board_count = board_receive(repo, conf)
+    if board_count:
+        push(repo, "guardian: received board messages")
     flush_outbox_git(repo)
     conf["last_git_sync"] = now()
     write_json(ETC / "config.json", conf)
@@ -1132,7 +1217,8 @@ def cycle():
         push(repo, "guardian: heartbeat " + conf["id"])
     pending = sorted((repo / "tasks/pending").glob("*.json"))
     for path in pending:
-        if not verify(path):
+        VERIFIED_SIGNER = verify_signer(path)
+        if not VERIFIED_SIGNER:
             rejected(repo, path, "podpis chybí nebo není platný")
             rejected_data = json.loads((repo / "results" / (path.stem[:100] + ".json")).read_text(encoding="utf-8"))
             deliver_result(conf, repo, path.stem[:100], rejected_data)
@@ -1141,6 +1227,13 @@ def cycle():
             task = json.loads(path.read_text(encoding="utf-8"))
             if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}", path.stem) or task.get("id", path.stem) != path.stem:
                 raise ValueError("ID úkolu nesouhlasí s názvem souboru")
+            if "station" not in task:
+                print(json.dumps({"status": "legacy_task_without_station", "task_id": path.stem}), file=sys.stderr, flush=True)
+            elif task_station_mismatch(task, conf["id"]):
+                rejected(repo, path, "úkol je určen jiné stanici")
+                result_data = json.loads((repo / "results" / (path.stem + ".json")).read_text(encoding="utf-8"))
+                deliver_result(conf, repo, path.stem, result_data)
+                continue
             if path.stem in state.get("delivery_pending_ids", []):
                 result_data = json.loads((repo / "results" / (path.stem + ".json")).read_text(encoding="utf-8"))
                 deliver_result(conf, repo, path.stem, result_data)
@@ -1173,6 +1266,7 @@ def cycle():
                 final_path = repo / "results" / ("final-" + path.stem + ".json")
                 if final_path.exists():
                     deliver_result(conf, repo, path.stem, json.loads(final_path.read_text(encoding="utf-8")))
+                VERIFIED_SIGNER = None
                 return
             result_data = json.loads((repo / "results" / (path.stem + ".json")).read_text(encoding="utf-8"))
             deliver_result(config(), repo, path.stem, result_data)
@@ -1181,9 +1275,18 @@ def cycle():
             path.unlink(missing_ok=True)
             Path(str(path) + ".sig").unlink(missing_ok=True)
             deliver_result(conf, repo, path.stem, failure)
+    VERIFIED_SIGNER = None
 
 
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "say":
+        import argparse
+        parser = argparse.ArgumentParser(description="Odešle informační zprávu jinému Guardianovi")
+        parser.add_argument("--to", required=True)
+        parser.add_argument("--body", required=True)
+        args = parser.parse_args(sys.argv[2:])
+        print(say(args.to, args.body))
+        return
     if len(sys.argv) > 1 and sys.argv[1] == "--once":
         cycle()
         return

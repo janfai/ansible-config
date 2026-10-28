@@ -123,7 +123,7 @@
 - name: Zapsat veřejný klíč mastera pro ověřování podpisů
   ansible.builtin.copy:
     dest: /etc/upgrade-guardian/allowed_signers
-    content: "{{ guardian_allowed_signers }}\n"
+    content: "{{ guardian_allowed_signers | trim }}\nrouter namespaces=\"guardian-board\" {{ guardian_allowed_signers | regex_search('ssh-ed25519 [A-Za-z0-9+/=]+') }}\n"
     owner: root
     group: root
     mode: '0644'
