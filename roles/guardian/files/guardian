@@ -779,9 +779,15 @@ def relay_auth(conf, method, path, body):
     secret = key_path.read_bytes().strip()
     timestamp = str(int(time.time()))
     nonce = os.urandom(16).hex()
-    message = "\n".join((method, path, timestamp, nonce, hashlib.sha256(body).hexdigest(), conf["id"])).encode()
+    parts = (method, path, timestamp, nonce, hashlib.sha256(body).hexdigest())
+    if not conf.get("relay_legacy_auth", False):
+        parts += (conf["id"],)
+    message = "\n".join(parts).encode()
     signature = hmac.new(secret, message, hashlib.sha256).hexdigest()
-    return {"X-Guardian-Time": timestamp, "X-Guardian-Nonce": nonce, "X-Guardian-Signature": signature, "X-Guardian-Station": conf["id"], "Content-Type": "application/json"}
+    headers = {"X-Guardian-Time": timestamp, "X-Guardian-Nonce": nonce, "X-Guardian-Signature": signature, "Content-Type": "application/json"}
+    if not conf.get("relay_legacy_auth", False):
+        headers["X-Guardian-Station"] = conf["id"]
+    return headers
 
 
 def relay_request(conf, method, suffix, value=None):

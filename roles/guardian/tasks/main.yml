@@ -158,6 +158,7 @@
       agent_workdir: /var/lib/upgrade-guardian/agent-work
       codex_home: "{{ guardian_codex_home }}"
       camouflage: false
+      relay_legacy_auth: "{{ station_config.guardian_relay_legacy_auth | default(false) }}"
   when: guardian_enabled | bool
 
 - name: Instalovat systemd unit Guardiana
