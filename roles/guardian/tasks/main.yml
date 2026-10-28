@@ -183,6 +183,25 @@
     daemon_reload: true
   when: guardian_enabled | bool
 
+- name: Zjistit dostupnost Codex CLI před retire
+  ansible.builtin.stat:
+    path: "{{ guardian_home }}/.local/bin/codex"
+  register: guardian_retire_codex
+  when: not (guardian_enabled | bool)
+
+- name: Odhlásit Codex před odstraněním profilu
+  ansible.builtin.command:
+    argv:
+      - "{{ guardian_home }}/.local/bin/codex"
+      - logout
+  become: true
+  become_user: guardian-agent
+  environment:
+    HOME: "{{ guardian_home }}"
+    CODEX_HOME: "{{ guardian_codex_home }}"
+  no_log: true
+  when: not (guardian_enabled | bool) and guardian_retire_codex.stat.exists
+
 - name: Zakázat a zastavit dřívější Guardian
   ansible.builtin.systemd:
     name: upgrade-guardian.service
