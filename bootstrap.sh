@@ -85,6 +85,7 @@ if [[ ! -d /var/lib/ansible-pull/.git ]]; then
     git -C /var/lib/ansible-pull remote add origin "${repository}"
 else
     git -C /var/lib/ansible-pull remote set-url origin "${repository}"
+    git -C /var/lib/ansible-pull config --replace-all remote.origin.fetch "+refs/heads/*:refs/remotes/origin/*"
 fi
 GIT_SSH_COMMAND="${git_ssh_command}" git -C /var/lib/ansible-pull fetch --no-tags origin "refs/heads/${branch}:refs/remotes/origin/${branch}"
 verified_sha="$(git -C /var/lib/ansible-pull rev-parse "refs/remotes/origin/${branch}^{commit}")"
