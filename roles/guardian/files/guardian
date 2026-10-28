@@ -1006,7 +1006,13 @@ def recover_interrupted_upgrades(repo, conf):
             if leases is None:
                 continue
             with leases[0], leases[1]:
-                status, details = execute_upgrade(prior["task"], task_id)
+                if prior["task"].get("type") == "cmd":
+                    prior["status"] = "blocked_waiting_instructions"
+                    write_json(path, prior)
+                    status = "blocked_waiting_instructions"
+                    details = {"resumed_after_restart": True, "previous_state": prior, "diagnostics": upgrade_diagnostics(), "rollback": "not_performed"}
+                else:
+                    status, details = execute_upgrade(prior["task"], task_id)
                 result(repo, task_id, status, **details)
             deliver_result(conf, repo, task_id, json.loads((repo / "results" / (task_id + ".json")).read_text(encoding="utf-8")))
             recovered += 1
@@ -1024,8 +1030,14 @@ def execute(repo, path, task, state, signed=False):
         Path(str(path) + ".sig").unlink(missing_ok=True)
         return False
     elif kind == "cmd":
+        state_path = VAR / "upgrade-state" / (str(task_id) + ".json")
+        if state_path.exists():
+            result(repo, task_id, "blocked_waiting_instructions", resumed_after_restart=True, rollback="not_performed")
+            return False
+        write_json(state_path, {"status": "running", "task_id": task_id, "task": task, "started_at": now()})
         code, out = cmd(str(task.get("command", "")), task.get("timeout", 300))
         result(repo, task_id, "ok" if code == 0 else "failed", exit_code=code, output=trim(out))
+        state_path.unlink(missing_ok=True)
         path.unlink(missing_ok=True)
         Path(str(path) + ".sig").unlink(missing_ok=True)
         return False

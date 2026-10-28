@@ -37,6 +37,6 @@ Codex se instaluje pouze pro provider `codex` z archivu oficiálního vydání O
 
 `guardian_relay_legacy_auth: true` v konfiguraci stanice explicitně povoluje autentizaci proti starému relay bez staniční hlavičky. Výchozí hodnota je false; automatický downgrade se neprovádí. Pro vm-mint je dočasně zapnutý, protože relay na VPS ještě používá původní protokol. URL s tajným prefixem může být v šifrovaném staničním souboru jako `relay_url`.
 
-Změna configu restartuje službu. Vendorovaný runtime obsahuje trvalý outbox a recovery upgrade-state. Běžný `cmd` nemá checkpointy; pro restartovatelný upgrade test se používá typ `upgrade` s explicitním krokem. Po restartu rozpracovaný upgrade vrátí `blocked_waiting_instructions`, neopakuje přerušený krok a neprovádí automatický rollback.
+Změna configu restartuje službu. Vendorovaný runtime obsahuje trvalý outbox a recovery upgrade-state. Také běžný `cmd` zapisuje stav před spuštěním a po restartu se označí jako přerušený; automaticky se neopakuje. Typ `upgrade` navíc uchovává dokončené kroky. Po restartu rozpracovaný upgrade vrátí `blocked_waiting_instructions`, neopakuje přerušený krok a neprovádí automatický rollback.
 
 Role zatím neprovádí registraci staničního klíče do Hetzner Git mailboxu ani jeho klonování. Bez této samostatné přípravy je funkční pouze HTTPS relay; samotný adresář repo není funkční fallback. Nevydávat nasazení za úplné, dokud není ověřený Git origin, SSH klíč a připnutý host key mailboxu.
