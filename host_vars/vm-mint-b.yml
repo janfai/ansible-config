@@ -2,9 +2,9 @@
 inventory_enabled: false
 ansible_pull_branch: staging
 mail_enabled: false
-guardian_enabled: false
+guardian_enabled: true
 guardian_git_enabled: true
-guardian_provider: codex
+guardian_provider: none
 guardian_station_id: vm-mint-b
 guardian_task_type: upgrade
 guardian_scope: system
