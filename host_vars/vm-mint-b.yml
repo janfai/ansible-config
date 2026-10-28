@@ -1,0 +1,10 @@
+---
+inventory_enabled: false
+ansible_pull_branch: staging
+guardian_enabled: true
+guardian_git_enabled: true
+guardian_provider: codex
+guardian_station_id: vm-mint-b
+guardian_task_type: upgrade
+guardian_scope: system
+guardian_relay_legacy_auth: true
