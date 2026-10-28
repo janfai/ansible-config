@@ -1,0 +1,79 @@
+---
+- name: Vygenerovat staniční klíč pouze na stanici
+  ansible.builtin.command:
+    argv: [ssh-keygen, -q, -t, ed25519, -N, '', -f, /etc/upgrade-guardian/station_ed25519]
+    creates: /etc/upgrade-guardian/station_ed25519
+
+- name: Chránit staniční privátní klíč
+  ansible.builtin.file:
+    path: /etc/upgrade-guardian/station_ed25519
+    owner: root
+    group: root
+    mode: '0600'
+
+- name: Připnout ověřený host key mailboxu
+  ansible.builtin.copy:
+    src: guardian-known-hosts
+    dest: /etc/upgrade-guardian/known_hosts
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restartovat Guardiana
+
+- name: Nastavit SSH mailboxu
+  ansible.builtin.copy:
+    dest: /etc/upgrade-guardian/ssh_config
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      Host guardian-git-vps
+        HostName {{ guardian_git_host }}
+        Port {{ guardian_git_port }}
+        User guardian-git
+        IdentityFile /etc/upgrade-guardian/station_ed25519
+        IdentitiesOnly yes
+        BatchMode yes
+        ConnectTimeout 10
+        StrictHostKeyChecking yes
+        UserKnownHostsFile /etc/upgrade-guardian/known_hosts
+        HostKeyAlgorithms ssh-ed25519
+  notify: Restartovat Guardiana
+
+- name: Ověřit inicializaci mailboxu
+  ansible.builtin.stat:
+    path: /var/lib/upgrade-guardian/repo/.git/guardian-initialized
+  register: guardian_git_initialized
+
+- name: Inicializovat mailbox se zachováním lokálních výsledků
+  when: not guardian_git_initialized.stat.exists
+  environment:
+    GIT_SSH_COMMAND: ssh -F /etc/upgrade-guardian/ssh_config
+  block:
+    - name: Inicializovat lokální Git
+      ansible.builtin.command:
+        argv: [git, init, /var/lib/upgrade-guardian/repo]
+        creates: /var/lib/upgrade-guardian/repo/.git
+
+    - name: Nastavit Git origin
+      ansible.builtin.command:
+        argv: [git, -C, /var/lib/upgrade-guardian/repo, config, remote.origin.url, 'guardian-git-vps:{{ guardian_git_root }}/guardian-{{ guardian_station_id }}.git']
+
+    - name: Nastavit fetch refspec
+      ansible.builtin.command:
+        argv: [git, -C, /var/lib/upgrade-guardian/repo, config, remote.origin.fetch, '+refs/heads/*:refs/remotes/origin/*']
+
+    - name: Stáhnout registrovaný mailbox
+      ansible.builtin.command:
+        argv: [git, -C, /var/lib/upgrade-guardian/repo, fetch, origin, master]
+
+    - name: Připojit hlavní větev mailboxu
+      ansible.builtin.command:
+        argv: [git, -C, /var/lib/upgrade-guardian/repo, checkout, -B, master, origin/master]
+
+    - name: Potvrdit inicializaci mailboxu
+      ansible.builtin.copy:
+        dest: /var/lib/upgrade-guardian/repo/.git/guardian-initialized
+        content: "initialized\n"
+        mode: '0600'
+      notify: Restartovat Guardiana

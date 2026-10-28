@@ -56,6 +56,10 @@
     - {path: /var/lib/upgrade-guardian/repo/hb, owner: root, group: root, mode: '0755'}
   when: guardian_enabled | bool
 
+- name: Připravit Git mailbox Guardiana
+  ansible.builtin.include_tasks: git-mailbox.yml
+  when: guardian_enabled | bool and guardian_git_enabled | bool
+
 - name: Ověřit manifest vendorované runtime kopie
   ansible.builtin.command:
     argv:

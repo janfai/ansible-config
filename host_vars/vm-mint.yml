@@ -2,6 +2,7 @@
 inventory_enabled: false
 ansible_pull_branch: staging
 guardian_enabled: true
+guardian_git_enabled: true
 guardian_provider: codex
 guardian_station_id: vm-mint
 guardian_task_type: upgrade
