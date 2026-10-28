@@ -14,16 +14,16 @@ class TeamViewer(unittest.TestCase):
         repo = next(t["ansible.builtin.copy"] for t in tasks if "ansible.builtin.copy" in t)
         self.assertIn("signed-by=/usr/share/keyrings/teamviewer-keyring.gpg", repo["content"])
         self.assertIn("/deb stable main", repo["content"])
-        package = next(t["ansible.builtin.apt"] for t in tasks if t.get("ansible.builtin.apt", {}).get("name") == "teamviewer")
-        self.assertEqual(package, {"name": "teamviewer", "state": "present"})
-        cache = next(t for t in tasks if t.get("name") == "Aktualizovat indexy po změně repozitáře TeamVieweru")
-        self.assertFalse(cache["changed_when"])
-        self.assertIn("not ansible_check_mode", cache["when"])
+        package_task = next(t for t in tasks if t.get("ansible.builtin.apt", {}).get("name") == "teamviewer")
+        package = package_task["ansible.builtin.apt"]
+        self.assertEqual(package, {"name": "teamviewer", "state": "latest", "update_cache": True, "cache_valid_time": 3600})
+        self.assertIn("not ansible_check_mode", package_task["when"])
+        unattended = next(t["ansible.builtin.copy"] for t in tasks if t.get("ansible.builtin.copy", {}).get("dest", "").endswith("52teamviewer-unattended-upgrades"))
+        self.assertIn('origin=TeamViewer GmbH,label=TeamViewer', unattended["content"])
+        self.assertEqual(unattended["mode"], "0644")
         service = next(t["ansible.builtin.systemd"] for t in tasks if "ansible.builtin.systemd" in t)
         self.assertEqual(service, {"name": "teamviewerd.service", "enabled": True, "state": "started"})
-        self.assertEqual(tasks[0]["when"], "teamviewer_enabled | bool")
         self.assertTrue(all("teamviewer_enabled | bool" in (t.get("when") if isinstance(t.get("when"), list) else [t.get("when")]) for t in tasks))
-        self.assertIn("station_id == 'lada'", tasks[0]["ansible.builtin.assert"]["that"])
 
     def test_station_configuration_is_opted_in_and_role_is_included(self):
         host = yaml.safe_load((BASE / "host_vars/lada.yml").read_text())

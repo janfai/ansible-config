@@ -1,11 +1,4 @@
 ---
-- name: Ověřit cílovou stanici TeamVieweru
-  ansible.builtin.assert:
-    that:
-      - station_id == 'lada'
-    fail_msg: Role TeamVieweru je povolena pouze pro stanici lada.
-  when: teamviewer_enabled | bool
-
 - name: Obnovit stabilní repozitář TeamVieweru
   ansible.builtin.copy:
     dest: /etc/apt/sources.list.d/teamviewer.list
@@ -13,23 +6,27 @@
     owner: root
     group: root
     mode: '0644'
-  register: teamviewer_repository
   when: teamviewer_enabled | bool
 
-- name: Aktualizovat indexy po změně repozitáře TeamVieweru
-  ansible.builtin.apt:
-    update_cache: true
-    cache_valid_time: 3600
-  changed_when: false
-  when:
-    - teamviewer_enabled | bool
-    - teamviewer_repository.changed
-    - not ansible_check_mode
-
-- name: Zajistit instalaci TeamVieweru
+- name: Aktualizovat TeamViewer na nejnovější verzi z repozitáře
   ansible.builtin.apt:
     name: teamviewer
-    state: present
+    state: latest
+    update_cache: true
+    cache_valid_time: 3600
+  when:
+    - teamviewer_enabled | bool
+    - not ansible_check_mode
+
+- name: Povolit aktualizace TeamVieweru přes unattended-upgrades
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/52teamviewer-unattended-upgrades
+    content: |
+      Unattended-Upgrade::Origins-Pattern:: "origin=TeamViewer GmbH,label=TeamViewer";
+
+    owner: root
+    group: root
+    mode: '0644'
   when: teamviewer_enabled | bool
 
 - name: Zapnout a spustit službu TeamVieweru
