@@ -31,4 +31,12 @@ SOPS pravidlo v `.sops.yaml` používá existující age příjemce repozitáře
 
 ## Codex CLI
 
-Codex se instaluje pouze pro provider `codex`, pouze pokud jeho binárka chybí, oficiálním instalátorem OpenAI s připnutou verzí `0.164.0`. Paměťový report k `mint_test` nedoložil SHA256 instalačního skriptu ani vydané binárky.
+Codex se instaluje pouze pro provider `codex` z archivu oficiálního vydání OpenAI `rust-v0.164.0`. SHA256 archivu `codex-x86_64-unknown-linux-musl.tar.gz` se ověřuje proti GitHub release digestu `90dd0b03b28afcb7fa733a4f73b413db2916a47347efd43fb669cc1c774ee8e4`. Nainstalovaná binárka má SHA256 `b93f6811d3f653f0fb83be4050d857fb9abbb111dfa2ce160563327daff7f306`. Přihlášení provádí samostatně orchestrátor.
+
+## Kompatibilita a ověření E2E
+
+`guardian_relay_legacy_auth: true` v konfiguraci stanice explicitně povoluje autentizaci proti starému relay bez staniční hlavičky. Výchozí hodnota je false; automatický downgrade se neprovádí. Pro vm-mint je dočasně zapnutý, protože relay na VPS ještě používá původní protokol. URL s tajným prefixem může být v šifrovaném staničním souboru jako `relay_url`.
+
+Změna configu restartuje službu. Vendorovaný runtime obsahuje trvalý outbox a recovery upgrade-state. Běžný `cmd` nemá checkpointy; pro restartovatelný upgrade test se používá typ `upgrade` s explicitním krokem. Po restartu rozpracovaný upgrade vrátí `blocked_waiting_instructions`, neopakuje přerušený krok a neprovádí automatický rollback.
+
+Role zatím neprovádí registraci staničního klíče do Hetzner Git mailboxu ani jeho klonování. Bez této samostatné přípravy je funkční pouze HTTPS relay; samotný adresář repo není funkční fallback. Nevydávat nasazení za úplné, dokud není ověřený Git origin, SSH klíč a připnutý host key mailboxu.
