@@ -23,7 +23,11 @@ if ! git merge-base --is-ancestor "$main_sha" "$staging_sha"; then
     exit 1
 fi
 
+exceptions_file=files/unsigned_history_exceptions
 while IFS= read -r commit_sha; do
+    if [[ -f "$exceptions_file" ]] && grep -Eq "^${commit_sha}( |$)" "$exceptions_file"; then
+        continue
+    fi
     if ! git -c gpg.format=ssh -c gpg.ssh.allowedSignersFile=files/allowed_signers verify-commit "$commit_sha" >/dev/null 2>&1; then
         printf 'Commit %s ve staging nemá platný podpis povoleného správce.\n' "$commit_sha" >&2
         exit 1

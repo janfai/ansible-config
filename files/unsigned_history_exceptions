@@ -1,0 +1,3 @@
+# Historické commity ve staging, které vznikly PŘED zavedením povinného podepisování (4e0767a, 2026-10-27 18:19)
+# a nelze je podepsat bez přepisu historie (rozbil by ansible-pull na stanicích). Jen přesné plné SHA, bez zástupných znaků.
+2e46064d43828c9612e6d91382c67a5ab718bd90 feat: use private SSH git for ansible-pull (Jan Faix, 2026-10-27 18:05, nepodepsáno)
