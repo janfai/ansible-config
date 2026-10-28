@@ -952,6 +952,29 @@ def upgrade_diagnostics():
 
 
 def execute_upgrade(task, task_id="upgrade"):
+    if NO_SYSTEMD:
+        return execute_upgrade_steps(task, task_id)
+    code, output = run(["systemctl", "is-active", "ansible-pull.timer"], timeout=30)
+    restore = code == 0
+    code, output = run(["systemctl", "mask", "--runtime", "--now", "ansible-pull.timer"], timeout=30)
+    if code:
+        return "blocked_waiting_instructions", {"error": "Nelze pozastavit ansible-pull.timer", "output": trim(output)}
+    try:
+        code, output = run(["systemctl", "show", "ansible-pull.service", "--property=ActiveState", "--value"], timeout=30)
+        if code or output.strip() not in ("inactive", "failed"):
+            return "blocked_waiting_instructions", {"error": "ansible-pull.service není nečinný", "output": trim(output)}
+        return execute_upgrade_steps(task, task_id)
+    finally:
+        code, output = run(["systemctl", "unmask", "--runtime", "ansible-pull.timer"], timeout=30)
+        if code:
+            raise RuntimeError("Nelze odmaskovat ansible-pull.timer: " + trim(output))
+        if restore:
+            code, output = run(["systemctl", "start", "ansible-pull.timer"], timeout=30)
+            if code:
+                raise RuntimeError("Nelze obnovit ansible-pull.timer: " + trim(output))
+
+
+def execute_upgrade_steps(task, task_id="upgrade"):
     steps = task.get("steps")
     if not isinstance(steps, list) or not steps:
         return "rejected", {"error": "upgrade vyžaduje neprázdný seznam steps"}
