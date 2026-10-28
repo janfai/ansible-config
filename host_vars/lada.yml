@@ -1,5 +1,4 @@
 inventory_enabled: true
-ansible_pull_branch: staging
 guardian_enabled: false
 guardian_git_enabled: true
 guardian_provider: codex
