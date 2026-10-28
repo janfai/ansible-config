@@ -78,9 +78,10 @@ def sync(repo):
 def push(repo, message):
     git(repo, "add", "-A")
     code, out = run(["git", "-C", str(repo), "diff", "--cached", "--quiet"])
-    if code == 0:
-        return
-    git(repo, "-c", "user.name=upgrade-guardian", "-c", "user.email=guardian@localhost", "commit", "-m", message)
+    if code not in (0, 1):
+        raise RuntimeError(out[-2000:])
+    if code == 1:
+        git(repo, "-c", "user.name=upgrade-guardian", "-c", "user.email=guardian@localhost", "commit", "-m", message)
     git(repo, "push", "origin", "master")
 
 
