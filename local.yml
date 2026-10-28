@@ -108,6 +108,11 @@
     - smartd
     - reporting
     - inventory
+    - role: hwinfo
+      hwinfo_enabled: "{{ station_config.hwinfo_enabled | default(false) }}"
+      hwinfo_install_inxi: "{{ station_config.hwinfo_install_inxi | default(false) }}"
+      hwinfo_station_id: "{{ station_id }}"
+      when: station_config.hwinfo_enabled | default(false) | bool
     - role: guardian
       guardian_enabled: "{{ station_config.guardian_enabled | default(false) }}"
       guardian_git_enabled: "{{ station_config.guardian_git_enabled | default(false) }}"

@@ -1,0 +1,38 @@
+---
+- name: Volitelně nainstalovat inxi z nakonfigurovaných repozitářů
+  ansible.builtin.apt:
+    name: inxi
+    state: present
+    update_cache: false
+  when: hwinfo_install_inxi | default(false) | bool
+
+- name: Nainstalovat sběrač hardwarových informací
+  ansible.builtin.copy:
+    src: hwinfo.py
+    dest: /usr/local/sbin/stanice-hwinfo
+    owner: root
+    group: root
+    mode: '0750'
+
+- name: Zajistit adresář hardwarových výpisů
+  ansible.builtin.file:
+    path: /var/lib/stanice-report
+    state: directory
+    owner: root
+    group: root
+    mode: '0750'
+
+- name: Nastavit identitu stanice pro sběrač
+  ansible.builtin.copy:
+    content: "{{ hwinfo_station_id }}\n"
+    dest: /var/lib/stanice-report/station-id
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Spustit sběr a odeslání změněných hardwarových výpisů
+  ansible.builtin.command:
+    argv:
+      - /usr/local/sbin/stanice-hwinfo
+  register: hwinfo_result
+  changed_when: "'commit vytvořen' in hwinfo_result.stdout"
