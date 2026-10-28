@@ -468,13 +468,13 @@ def agent_environment(workdir, provider, task=None):
     else:
         if agent is None:
             raise KeyError("guardian-agent")
-        workdir.chown(agent.pw_uid, agent.pw_gid)
+        os.chown(workdir, agent.pw_uid, agent.pw_gid)
         workdir.chmod(0o700)
         if provider == "codex":
             Path(home).mkdir(parents=True, exist_ok=True)
             Path(home).chmod(0o700)
             if agent is not None:
-                Path(home).chown(agent.pw_uid, agent.pw_gid)
+                os.chown(home, agent.pw_uid, agent.pw_gid)
         use_root = agent_runs_as_root(provider, task)
         def preexec():
             if provider == "codex":
@@ -518,10 +518,10 @@ def prepare_codex_home(path):
     path.chmod(0o700)
     agent, _ = agent_identity()
     if agent is not None and os.environ.get("UPGRADE_GUARDIAN_TESTING") != "1":
-        path.chown(agent.pw_uid, agent.pw_gid)
+        os.chown(path, agent.pw_uid, agent.pw_gid)
         for child in path.iterdir():
             if child.is_file():
-                child.chown(agent.pw_uid, agent.pw_gid)
+                os.chown(child, agent.pw_uid, agent.pw_gid)
     return path
 
 
@@ -645,7 +645,7 @@ def auth_codex(task):
         config_path.chmod(0o600)
         agent, _ = agent_identity()
         if agent is not None and os.environ.get("UPGRADE_GUARDIAN_TESTING") != "1":
-            config_path.chown(agent.pw_uid, agent.pw_gid)
+            os.chown(config_path, agent.pw_uid, agent.pw_gid)
     workdir = Path(config().get("agent_workdir", str(VAR / "agent-work")))
     workdir.mkdir(parents=True, exist_ok=True)
     try:
@@ -694,7 +694,7 @@ def auth_codex(task):
                         auth_file.chmod(0o600)
                         agent, _ = agent_identity()
                         if agent is not None:
-                            auth_file.chown(agent.pw_uid, agent.pw_gid)
+                            os.chown(auth_file, agent.pw_uid, agent.pw_gid)
                 threading.Thread(target=finish_auth, daemon=True).start()
                 return "auth_request", {"url": url, "code": code}
     process.terminate()
@@ -746,7 +746,7 @@ def dispatch_agent(repo, task, state, signed=False):
             drop_privileges = None
         else:
             agent = pwd.getpwnam("guardian-agent")
-            workdir.chown(agent.pw_uid, agent.pw_gid)
+            os.chown(workdir, agent.pw_uid, agent.pw_gid)
             workdir.chmod(0o700)
             env["HOME"] = agent.pw_dir
             env["USER"] = "guardian-agent"
