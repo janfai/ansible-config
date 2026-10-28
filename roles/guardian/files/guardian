@@ -563,8 +563,17 @@ def codex_sandbox(task, signed):
     return args
 
 
-def dispatch_codex(repo, task, state, signed):
+def codex_executable():
     executable = shutil.which("codex")
+    if not executable:
+        candidate = Path("/var/lib/upgrade-guardian/agent-home/.local/bin/codex")
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return executable
+
+
+def dispatch_codex(repo, task, state, signed):
+    executable = codex_executable()
     codex_home = Path(config().get("codex_home", str(VAR / "codex-home")))
     if not executable:
         return "no-agent", {}
@@ -638,7 +647,7 @@ def dispatch_codex(repo, task, state, signed):
 
 
 def auth_codex(task):
-    executable = shutil.which("codex")
+    executable = codex_executable()
     if not executable:
         return "no-agent", {}
     codex_home = Path(config().get("codex_home", str(VAR / "codex-home")))
