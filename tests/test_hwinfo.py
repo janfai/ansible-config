@@ -1,11 +1,32 @@
 import importlib.util
 import unittest
 from pathlib import Path
+from unittest import mock
 
 MODULE = Path(__file__).parents[1] / "roles/hwinfo/files/hwinfo.py"
 SPEC = importlib.util.spec_from_file_location("hwinfo", MODULE)
 hwinfo = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(hwinfo)
+
+
+class HwinfoCollectSudoTests(unittest.TestCase):
+    def test_root_calls_dmidecode_without_sudo_wrapper(self):
+        with mock.patch.object(hwinfo.os, "geteuid", return_value=0), \
+             mock.patch.object(hwinfo.shutil, "which", return_value="/usr/sbin/dmidecode"), \
+             mock.patch.object(hwinfo, "run", return_value=(0, "", "")) as run_mock:
+            hwinfo.collect()
+        dmidecode_calls = [c.args[0] for c in run_mock.call_args_list if "dmidecode" in c.args[0]]
+        self.assertTrue(dmidecode_calls)
+        self.assertNotIn("sudo", dmidecode_calls[0])
+
+    def test_non_root_keeps_sudo_dash_n_wrapper(self):
+        with mock.patch.object(hwinfo.os, "geteuid", return_value=1000), \
+             mock.patch.object(hwinfo.shutil, "which", return_value="/usr/bin/sudo"), \
+             mock.patch.object(hwinfo, "run", return_value=(0, "", "")) as run_mock:
+            hwinfo.collect()
+        dmidecode_calls = [c.args[0] for c in run_mock.call_args_list if "dmidecode" in c.args[0]]
+        self.assertTrue(dmidecode_calls)
+        self.assertEqual(dmidecode_calls[0][:2], ["sudo", "-n"])
 
 
 class HwinfoSanitizationTests(unittest.TestCase):

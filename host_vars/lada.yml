@@ -1,4 +1,5 @@
 hwinfo_enabled: true
+hwinfo_sudo_user: faix
 inventory_enabled: true
 guardian_enabled: false
 guardian_git_enabled: true

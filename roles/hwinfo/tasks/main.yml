@@ -30,6 +30,17 @@
     group: root
     mode: '0644'
 
+- name: Povolit bezheslový dmidecode/smartctl pro ruční spuštění sběrače (mimo root)
+  ansible.builtin.copy:
+    content: |
+      {{ hwinfo_sudo_user }} ALL=(root) NOPASSWD: /usr/sbin/dmidecode, /usr/sbin/smartctl
+    dest: /etc/sudoers.d/hwinfo-{{ hwinfo_sudo_user }}
+    owner: root
+    group: root
+    mode: '0440'
+    validate: visudo -cf %s
+  when: hwinfo_sudo_user | default('') | length > 0
+
 - name: Spustit sběr a odeslání změněných hardwarových výpisů
   ansible.builtin.command:
     argv:

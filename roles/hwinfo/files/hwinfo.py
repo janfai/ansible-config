@@ -37,24 +37,32 @@ def clean(name, value):
     return '\n'.join(lines).strip() + '\n' if lines else ''
 
 def collect():
+    # Jako root (typicky Ansible become) sudo nic nepřidá a jen ho to zbytečně vystavuje
+    # vlastnímu sudoers ověření (na některých stanicích i root bez tty/NOPASSWD selže);
+    # dmidecode/smartctl se pak volá přímo. Mimo root (ruční spuštění) zůstává sudo -n
+    # s případnou NOPASSWD výjimkou pro tyto dva konkrétní čtecí příkazy.
+    as_root = os.geteuid() == 0
+    sudo_prefix = [] if as_root else ['sudo', '-n']
+    sudo_ok = as_root or (shutil.which('sudo') and run(['sudo', '-n', 'true'], timeout=10)[0] == 0)
     specs = {
         'inxi': ['inxi', '-Fz'],
-        'dmidecode': ['sudo', '-n', 'dmidecode', '--type', 'bios', '--type', 'baseboard', '--type', 'system'],
+        'dmidecode': sudo_prefix + ['dmidecode', '--type', 'bios', '--type', 'baseboard', '--type', 'system'],
         'lscpu': ['lscpu'],
         'lsblk': ['lsblk', '-e7', '-o', 'NAME,TYPE,SIZE,FSTYPE,MOUNTPOINTS,MODEL'],
         'lspci': ['lspci', '-nn'],
         'lsusb': ['lsusb'],
     }
-    if shutil.which('sudo') and run(['sudo', '-n', 'true'], timeout=10)[0] == 0:
+    if sudo_ok:
         if not shutil.which('dmidecode'):
             specs.pop('dmidecode')
         if shutil.which('smartctl'):
-            specs['smartctl'] = ['sudo', '-n', 'smartctl', '--scan-open']
+            specs['smartctl'] = sudo_prefix + ['smartctl', '--scan-open']
     else:
         specs.pop('dmidecode')
     result = {}
     for name, args in specs.items():
-        if not shutil.which(args[0]):
+        prog = next((a for a in args if a not in ('sudo', '-n')), args[0])
+        if not shutil.which(prog):
             continue
         if name == 'smartctl':
             code, devices, _ = run(args)
@@ -63,7 +71,7 @@ def collect():
                 for line in devices.splitlines():
                     device = line.split()[0] if line.split() else ''
                     if device.startswith('/dev/'):
-                        rc, out, _ = run(['sudo', '-n', 'smartctl', '-i', '-H', device])
+                        rc, out, _ = run(sudo_prefix + ['smartctl', '-i', '-H', device])
                         if out:
                             outputs.append(f'## {device}\n{out}')
             output = '\n'.join(outputs)
