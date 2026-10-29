@@ -25,7 +25,9 @@ class GuardianVendor(unittest.TestCase):
         self.assertIn("agent_provider: \"{{ guardian_provider }}\"", tasks)
         self.assertIn("guardian_provider == 'none'", tasks)
         self.assertIn("guardian_mode: temporary", defaults)
+        self.assertIn("guardian_camouflage: false", defaults)
         self.assertIn('mode: "{{ guardian_mode }}"', tasks)
+        self.assertIn('camouflage: "{{ guardian_camouflage | bool }}"', tasks)
         self.assertIn("guardian.service", tasks)
 
     def test_existing_station_paths_move_before_canonical_paths_are_created(self):

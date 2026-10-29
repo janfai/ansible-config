@@ -2,6 +2,7 @@
 guardian_enabled: false
 guardian_provider: none
 guardian_mode: temporary
+guardian_camouflage: false
 guardian_station_id: "{{ station_id }}"
 guardian_legacy_station_id: lada
 guardian_legacy_hmac_key: "{{ guardian_secrets.legacy_hmac_key | default('') }}"
