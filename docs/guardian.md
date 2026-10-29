@@ -42,6 +42,14 @@ Pro samostatné zprovoznění nebo opravu Guardianu na vm-linux použijte `ansib
 
 Padding Guardiana, lokální jitter časovačů workeru a VPN gate jsou provozní invarianty vm-linux. Role je nepřenáší do fleet defaults, nespravuje jejich drop-iny a nemaže je při správě Guardian služby. Jejich změna vyžaduje samostatné výslovné rozhodnutí; Ansible změny samy o sobě nejsou nasazením na vm-linux.
 
+## home-laptop (Omarchy)
+
+`guardian-home-laptop.yml` je samostatný lokální vstup pro `home-laptop`; nepoužívá Mint-only `local.yml` ani `guardian-vm-linux.yml`. Před rolí ověří hostname `home-laptop` a Ansible distribuci `Archlinux` a potom spustí jen roli `guardian`. Profil je `permanent`, mailbox Git Gate je zapnutý a zdokumentované generické defaults `guardian_provider: none` a `guardian_camouflage: false` zůstávají zachované. Codex agent se nezapíná bez samostatného rozhodnutí a device-auth.
+
+`host_vars/home-laptop.sops.yaml` obsahuje vlastní relay URL/HMAC, master `allowed_signers` a staniční SSH privátní klíč. Soubor je šifrovaný pro NAS; první aktivace jej dešifruje přes NAS do dočasného souboru s režimem `0600` a předá jej Ansible jako `guardian_secrets`. Role pak nepoužije lokální SOPS lookup. Privátní staniční klíč se obnoví pouze pokud cílový soubor chybí; jinak `ssh-keygen` také respektuje `creates`. Privátní i veřejná část dostanou `root:root` a režimy `0600`/`0644`. Záloha soukromého klíče v `~/Work/memory/secrets/home-laptop-guardian-station-key.enc.yaml` je šifrovaná příjemcem NAS.
+
+Po úspěšném Ansible běhu proveďte Gate registraci nejprve s `guardian-git-enroll --id home-laptop --station jan@home-laptop --master-key ~/.ssh/id_ed25519.pub --master-name home-laptop --ssh-option StrictHostKeyChecking=yes --dry-run`. Ověří se veřejný klíč stanice, účet/Gate a host key VPS; teprve potom lze opakovat bez `--dry-run`. Registrace je idempotentní a vytváří jen mailbox `guardian-home-laptop`, pokud dosud chybí.
+
 ## Kompatibilita a ověření E2E
 
 `guardian_relay_legacy_auth: true` v konfiguraci stanice explicitně povoluje autentizaci proti starému relay bez staniční hlavičky. Výchozí hodnota je false; automatický downgrade se neprovádí. Pro vm-mint je dočasně zapnutý, protože relay na VPS ještě používá původní protokol. URL s tajným prefixem může být v šifrovaném staničním souboru jako `relay_url`.

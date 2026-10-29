@@ -1,0 +1,9 @@
+---
+guardian_enabled: true
+guardian_git_enabled: true
+guardian_provider: none
+guardian_mode: permanent
+guardian_camouflage: false
+guardian_station_id: home-laptop
+guardian_relay_url: "{{ guardian_secrets.relay_url }}"
+guardian_ssh_target: jan@home-laptop

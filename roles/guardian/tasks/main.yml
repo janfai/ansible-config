@@ -12,7 +12,9 @@
       {{ lookup('community.sops.sops', playbook_dir ~ '/host_vars/' ~ station_id ~ '.sops.yaml',
       input_type='yaml', output_type='yaml') | from_yaml }}
   no_log: true
-  when: guardian_enabled | bool
+  when:
+    - guardian_secrets is not defined
+    - guardian_enabled | bool
 
 - name: Ověřit nastavení Guardiana
   ansible.builtin.assert:

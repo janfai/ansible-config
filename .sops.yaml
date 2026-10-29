@@ -24,3 +24,6 @@ creation_rules:
   - path_regex: '^host_vars/vm-linux\.sops\.yaml$'
     age: >-
       age1wvl3m4stf3rccpt634jlvyyqlqaqexnq39egzxg7870hexehz37syw7ffx,age1qzvj7dpclfwe7exs7hhmmce2xfdl7u3f430efnlzha9c8pdtm3yqh24an2
+  - path_regex: '^host_vars/home-laptop\.sops\.yaml$'
+    age: >-
+      age1wvl3m4stf3rccpt634jlvyyqlqaqexnq39egzxg7870hexehz37syw7ffx

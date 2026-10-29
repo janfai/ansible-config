@@ -1,0 +1,30 @@
+---
+- name: Správa permanentního Guardiana na home-laptop
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: true
+  vars:
+    station_id: home-laptop
+  pre_tasks:
+    - name: Ověřit cílový Omarchy host
+      ansible.builtin.assert:
+        that:
+          - ansible_hostname == 'home-laptop'
+          - ansible_distribution == 'Archlinux'
+        fail_msg: Tento vstupní bod je určen pouze pro home-laptop s Arch Linuxem.
+
+    - name: Načíst profil home-laptop
+      ansible.builtin.include_vars:
+        file: host_vars/home-laptop.yml
+        name: station_config
+
+  roles:
+    - role: guardian
+      guardian_enabled: "{{ station_config.guardian_enabled | bool }}"
+      guardian_git_enabled: "{{ station_config.guardian_git_enabled | bool }}"
+      guardian_provider: "{{ station_config.guardian_provider | default('none') }}"
+      guardian_mode: "{{ station_config.guardian_mode | default('temporary') }}"
+      guardian_camouflage: "{{ station_config.guardian_camouflage | default(false) | bool }}"
+      guardian_station_id: "{{ station_config.guardian_station_id | default(station_id) }}"
+      guardian_relay_url: "{{ station_config.guardian_relay_url | default('') }}"

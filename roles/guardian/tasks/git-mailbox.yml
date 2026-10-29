@@ -1,8 +1,25 @@
 ---
+- name: Obnovit staniční klíč z šifrované zálohy, pokud chybí
+  ansible.builtin.copy:
+    content: "{{ guardian_secrets.station_ssh_private_key }}"
+    dest: /etc/guardian/station_ed25519
+    owner: root
+    group: root
+    mode: '0600'
+    force: false
+  no_log: true
+  when: guardian_secrets.station_ssh_private_key is defined
+
 - name: Vygenerovat staniční klíč pouze na stanici
   ansible.builtin.command:
     argv: [ssh-keygen, -q, -t, ed25519, -N, '', -f, /etc/guardian/station_ed25519]
     creates: /etc/guardian/station_ed25519
+
+- name: Zajistit existenci veřejné části staničního klíče
+  ansible.builtin.shell: ssh-keygen -y -f /etc/guardian/station_ed25519 > /etc/guardian/station_ed25519.pub
+  args:
+    creates: /etc/guardian/station_ed25519.pub
+  no_log: true
 
 - name: Chránit staniční privátní klíč
   ansible.builtin.file:
@@ -10,6 +27,13 @@
     owner: root
     group: root
     mode: '0600'
+
+- name: Chránit veřejnou část staničního klíče
+  ansible.builtin.file:
+    path: /etc/guardian/station_ed25519.pub
+    owner: root
+    group: root
+    mode: '0644'
 
 - name: Připnout ověřený host key mailboxu
   ansible.builtin.copy:
