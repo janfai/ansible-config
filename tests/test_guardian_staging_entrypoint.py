@@ -1,3 +1,7 @@
+import getpass
+import grp
+import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -10,6 +14,100 @@ BASE = Path(__file__).resolve().parents[1]
 
 
 class GuardianStagingEntrypoint(unittest.TestCase):
+    def run_guardian_fixture(
+        self,
+        *,
+        station_id="vm-linux",
+        distribution="Linux Mint",
+        age_key=True,
+        owner=None,
+        group=None,
+        mode="0600",
+    ):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            playbook = (BASE / "guardian-vm-linux.yml").read_text()
+            playbook = playbook.replace("/etc/ansible/station-id", str(root / "station-id"))
+            playbook = playbook.replace("/etc/ansible/age.key", str(root / "age.key"))
+            playbook = playbook.replace("pw_name == 'root'", f"pw_name == '{owner or getpass.getuser()}'")
+            playbook = playbook.replace("gr_name == 'root'", f"gr_name == '{group or grp.getgrgid(os.getgid()).gr_name}'")
+            (root / "guardian-vm-linux.yml").write_text(playbook)
+            shutil.copy2(BASE / "ansible.cfg", root / "ansible.cfg")
+            shutil.copytree(BASE / "group_vars", root / "group_vars")
+            (root / "host_vars").mkdir()
+            shutil.copy2(BASE / "host_vars/vm-linux.yml", root / "host_vars/vm-linux.yml")
+            role = root / "roles/guardian/tasks"
+            role.mkdir(parents=True)
+            (role / "main.yml").write_text(f"- name: Mark role execution\n  ansible.builtin.copy:\n    content: reached\n    dest: {root / 'role-ran'}\n")
+            (root / "station-id").write_text(station_id + "\n")
+            if age_key:
+                (root / "age.key").write_text("")
+                (root / "age.key").chmod(int(mode, 8))
+            result = subprocess.run(
+                [
+                    "ansible-playbook",
+                    "-i",
+                    "localhost,",
+                    "guardian-vm-linux.yml",
+                    "-e",
+                    json.dumps({"ansible_distribution": distribution}),
+                ],
+                cwd=root,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            return result, (root / "role-ran").exists()
+
+    @unittest.skipUnless(shutil.which("ansible-playbook"), "ansible-playbook není nainstalován")
+    def test_wrong_station_id_and_os_are_rejected_before_role_execution(self):
+        for station_id, distribution in (("other-station", "Linux Mint"), ("vm-linux", "Ubuntu")):
+            with self.subTest(station_id=station_id, distribution=distribution):
+                result, role_ran = self.run_guardian_fixture(station_id=station_id, distribution=distribution)
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn("Tento vstupní bod je určen pouze pro vm-linux s Linux Mint.", result.stdout)
+                self.assertFalse(role_ran, result.stdout + result.stderr)
+
+    @unittest.skipUnless(shutil.which("ansible-playbook"), "ansible-playbook není nainstalován")
+    def test_missing_or_insecure_age_key_is_rejected_before_role_execution(self):
+        cases = (
+            {"age_key": False},
+            {"owner": "different-owner"},
+            {"group": "different-group"},
+            {"mode": "0644"},
+        )
+        for case in cases:
+            with self.subTest(case=case):
+                result, role_ran = self.run_guardian_fixture(**case)
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn("Chybí bezpečná age identita nebo očekávaný profil Guardiana vm-linux.", result.stdout)
+                self.assertFalse(role_ran, result.stdout + result.stderr)
+
+    def test_guardian_role_does_not_manage_worker_jitter_or_vpn_gate(self):
+        tasks = yaml.safe_load((BASE / "roles/guardian/tasks/main.yml").read_text())
+        serialized = (BASE / "roles/guardian/tasks/main.yml").read_text()
+        managed_paths = {
+            module.get("dest")
+            for task in tasks
+            for module in task.values()
+            if isinstance(module, dict) and module.get("dest")
+        }
+        self.assertTrue(managed_paths)
+        self.assertTrue(all("guardian" in path for path in managed_paths), managed_paths)
+        for protected_path in (
+            "/etc/systemd/user/agent-mailbox-worker.service.d",
+            "/etc/systemd/user/agent-mailbox-worker.timer.d",
+            "wstunnel-client",
+            "vpn-gate",
+        ):
+            self.assertNotIn(protected_path, serialized)
+
+    @unittest.skipUnless(shutil.which("ansible-playbook"), "ansible-playbook není nainstalován")
+    def test_valid_fixture_reaches_guardian_role(self):
+        result, role_ran = self.run_guardian_fixture()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue(role_ran, result.stdout + result.stderr)
+
     def test_guardian_entrypoint_is_vm_linux_only_and_does_not_load_generic_mail_secrets(self):
         play = yaml.safe_load((BASE / "guardian-vm-linux.yml").read_text())[0]
         serialized = (BASE / "guardian-vm-linux.yml").read_text()
