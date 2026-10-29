@@ -33,6 +33,13 @@ def main():
     configured_path = key_map.get(station_id.name)
     if configured_path is not None and configured_path != str(key_path):
         fail("station id is already mapped to a different key path")
+    try:
+        for mapped_station, mapped_path in key_map.items():
+            existing_key = Path(mapped_path).read_bytes()
+            if existing_key == secret and not (mapped_station == station_id.name and mapped_path == str(key_path)):
+                fail("station key uniqueness check failed")
+    except Exception:
+        fail("station key uniqueness check failed")
     if key_path.exists():
         if key_path.is_symlink() or not key_path.is_file():
             fail("station key path is not a regular file")

@@ -6,7 +6,44 @@
     relay_config_path: /etc/guardian/relay.json
     relay_station_key_path: /etc/guardian/stations/home-laptop.key
     relay_secrets: "{{ lookup('guardian_sops_remote', playbook_dir ~ '/host_vars/home-laptop.sops.yaml') | from_yaml }}"
+    relay_uniqueness_guard: |
+      import json
+      import pathlib
+      import sys
+      try:
+          config_path, station_id, key_path = sys.argv[1:]
+          incoming = sys.stdin.buffer.read()
+          config = json.loads(pathlib.Path(config_path).read_bytes())
+          key_map = config.get('station_key_files')
+          if not incoming.strip() or not isinstance(key_map, dict):
+              raise ValueError
+          configured_path = key_map.get(station_id)
+          if configured_path is not None and configured_path != key_path:
+              raise ValueError
+          target = pathlib.Path(key_path)
+          if target.exists() or target.is_symlink():
+              if target.is_symlink() or not target.is_file() or target.read_bytes() != incoming:
+                  raise ValueError
+          for mapped_station, mapped_path in key_map.items():
+              existing = pathlib.Path(mapped_path).read_bytes()
+              if existing == incoming and not (mapped_station == station_id and mapped_path == key_path):
+                  raise ValueError
+      except Exception:
+          raise SystemExit('Relay station key uniqueness check failed')
   tasks:
+    - name: Ověřit jedinečnost HMAC klíče před změnami na VPS
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/python3
+          - -c
+          - "{{ relay_uniqueness_guard }}"
+          - "{{ relay_config_path }}"
+          - "{{ relay_station_id }}"
+          - "{{ relay_station_key_path }}"
+        stdin: "{{ relay_secrets.hmac_key | trim }}\n"
+        stdin_add_newline: false
+      no_log: true
+
     - name: Zajistit adresář pomocných nástrojů Relay
       ansible.builtin.file:
         path: /opt/guardian/ansible
