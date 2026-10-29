@@ -68,6 +68,21 @@ class GuardianHomeLaptop(unittest.TestCase):
                 if not expected:
                     self.assertIn("Tento vstupní bod je určen pouze pro home-laptop s Arch Linuxem.", result.stdout)
 
+    @unittest.skipUnless(shutil.which("ansible-playbook"), "ansible-playbook není nainstalován")
+    def test_extra_vars_cannot_redirect_station_or_guardian_identity(self):
+        for override in ("station_id", "guardian_station_id"):
+            with self.subTest(override=override), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                marker = root / "role-ran"
+                self.create_entrypoint_fixture(
+                    root,
+                    f"- name: Record role execution\n  ansible.builtin.copy:\n    content: reached\n    dest: {marker}\n",
+                )
+                result = self.run_entrypoint(root, {override: "vm-linux"})
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn("Identita vstupního bodu musí zůstat home-laptop.", result.stdout)
+                self.assertFalse(marker.exists(), result.stdout + result.stderr)
+
     def test_host_profile_is_permanent_with_documented_generic_defaults(self):
         config = yaml.safe_load((BASE / "host_vars/home-laptop.yml").read_text())
         self.assertTrue(config["guardian_enabled"])

@@ -10,6 +10,13 @@
     guardian_gate_enroll_bin: "{{ lookup('env', 'HOME') }}/Work/bin/guardian-git-enroll"
     guardian_gate_master_public_key: "{{ lookup('env', 'HOME') }}/.ssh/id_ed25519.pub"
   pre_tasks:
+    - name: Odmítnout přepsání identity home-laptop
+      ansible.builtin.assert:
+        that:
+          - station_id == 'home-laptop'
+          - guardian_station_id | default('home-laptop') == 'home-laptop'
+        fail_msg: Identita vstupního bodu musí zůstat home-laptop.
+
     - name: Ověřit cílový Omarchy host
       ansible.builtin.assert:
         that:
