@@ -53,7 +53,7 @@
         that:
           - relay_station_key_stat.stat.pw_name == 'root'
           - relay_station_key_stat.stat.gr_name == 'guardian-relay'
-          - relay_station_key_stat.stat.mode == '0600'
+          - relay_station_key_stat.stat.mode == '0640'
         fail_msg: Existující klíč Relay nemá očekávaného vlastníka nebo režim.
       no_log: true
 

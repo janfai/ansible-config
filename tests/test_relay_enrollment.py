@@ -65,7 +65,7 @@ class RelayEnrollment(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, b"changed\n")
         self.assertEqual(self.key.read_bytes(), FIXTURE_KEY)
-        self.assertEqual(self.key.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(self.key.stat().st_mode & 0o777, 0o640)
         updated = json.loads(self.config.read_text())
         self.assertEqual(updated["station_key_files"]["home-laptop"], str(self.key))
         self.assertEqual(updated["station_key_files"]["lada"], self.initial["station_key_files"]["lada"])
@@ -192,7 +192,12 @@ class RelayEnrollment(unittest.TestCase):
         self.assertNotIn("content:", playbook)
         self.assertNotIn("stdin:", playbook)
         self.assertIn("plugins/action", (BASE / "ansible.cfg").read_text())
-        self.assertIn("root", parsed_playbook[0]["tasks"][-1]["ansible.builtin.assert"]["that"][0])
+        relay_assertion = parsed_playbook[0]["tasks"][-1]["ansible.builtin.assert"]["that"]
+        self.assertEqual(relay_assertion, [
+            "relay_station_key_stat.stat.pw_name == 'root'",
+            "relay_station_key_stat.stat.gr_name == 'guardian-relay'",
+            "relay_station_key_stat.stat.mode == '0640'",
+        ])
         self.assertFalse((BASE / "host_vars/home-laptop.sops.yaml").exists())
 
     def test_fixture_key_is_only_passed_as_stdin_and_no_key_temp_file_is_created(self):
@@ -201,7 +206,7 @@ class RelayEnrollment(unittest.TestCase):
         after = set(self.root.rglob("*"))
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.key.read_bytes(), FIXTURE_KEY)
-        self.assertEqual(self.key.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(self.key.stat().st_mode & 0o777, 0o640)
         self.assertFalse(any(path.is_file() and path != self.key and FIXTURE_KEY.rstrip() in path.read_bytes() for path in after - before))
 
     def test_action_plugin_uses_ssh_stdin_and_sanitizes_errors(self):
@@ -213,6 +218,11 @@ class RelayEnrollment(unittest.TestCase):
         self.assertIn('"Relay enrollment command failed."', action_source)
         self.assertIn("os.fchown", UPDATER.read_text())
         self.assertIn("os.fchmod", UPDATER.read_text())
+        updater = UPDATER.read_text()
+        self.assertLess(updater.index("os.fchown(stream.fileno()"), updater.index("os.fchmod(stream.fileno(), 0o640)"))
+        self.assertLess(updater.index("os.fchmod(stream.fileno(), 0o640)"), updater.index("stream.write(secret)"))
+        self.assertNotIn("os.fchmod(stream.fileno(), 0o660)", updater)
+        self.assertNotIn("os.fchmod(stream.fileno(), 0o644)", updater)
 
     def test_action_plugin_sends_fixture_only_in_data_and_hides_remote_errors(self):
         from unittest.mock import patch

@@ -79,8 +79,8 @@ def main():
             fail("station key appeared during enrollment")
         try:
             with os.fdopen(fd, "wb") as stream:
-                os.fchmod(stream.fileno(), 0o600)
                 os.fchown(stream.fileno(), 0, grp.getgrnam("guardian-relay").gr_gid)
+                os.fchmod(stream.fileno(), 0o640)
                 stream.write(secret)
                 stream.flush()
                 os.fsync(stream.fileno())
