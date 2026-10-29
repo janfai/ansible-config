@@ -35,7 +35,7 @@ class GuardianHomeLaptop(unittest.TestCase):
         shutil.copy2(BASE / "roles/guardian/defaults/main.yml", defaults / "main.yml")
 
     def run_entrypoint(self, root, extra_vars=None, env=None):
-        variables = {"ansible_hostname": "home-laptop", "ansible_distribution": "Archlinux"}
+        variables = {"ansible_hostname": "home-laptop", "ansible_distribution": "Archlinux", "home_laptop_ssh_firewall_enabled": False}
         variables.update(extra_vars or {})
         process_env = os.environ.copy()
         process_env["ANSIBLE_LOOKUP_PLUGINS"] = str(BASE / "lookup_plugins")
@@ -258,6 +258,20 @@ class GuardianHomeLaptop(unittest.TestCase):
                 self.assertEqual(call["sock"], "/run/user/1000/ssh-agent.socket")
                 self.assertEqual(call["uid"], os.getuid())
             self.assertNotIn(FIXTURE_STATION_PUBLIC_KEY, first.stdout + first.stderr)
+
+    def test_ssh_ufw_allows_port_22_and_removes_limit_without_touching_other_rules(self):
+        play = yaml.safe_load((BASE / "guardian-home-laptop.yml").read_text())[0]
+        self.assertIs(play["vars"]["home_laptop_ssh_firewall_enabled"], True)
+        tasks = [t for t in play["tasks"] if "community.general.ufw" in t]
+        self.assertEqual([t["community.general.ufw"]["rule"] for t in tasks], ["allow", "limit"])
+        allow, limit = (t["community.general.ufw"] for t in tasks)
+        self.assertEqual((allow["port"], allow["proto"], allow.get("delete")), ("22", "tcp", None))
+        self.assertEqual((limit["port"], limit["proto"], limit["delete"]), ("22", "tcp", True))
+        for t in tasks:
+            self.assertEqual(t["when"], "home_laptop_ssh_firewall_enabled | bool")
+            self.assertNotIn("from_ip", t["community.general.ufw"])
+            self.assertNotIn("state", t["community.general.ufw"])
+        self.assertEqual(yaml.safe_load((BASE / "host_vars/home-laptop.yml").read_text()).get("home_laptop_ssh_firewall_enabled"), None)
 
     def test_gate_enrollment_defaults_pin_vps_alias_and_local_key_path(self):
         play_vars = yaml.safe_load((BASE / "guardian-home-laptop.yml").read_text())[0]["vars"]

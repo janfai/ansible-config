@@ -6,6 +6,7 @@
   gather_facts: true
   vars:
     station_id: home-laptop
+    home_laptop_ssh_firewall_enabled: true
     guardian_gate_enrollment_enabled: false
     guardian_gate_enroll_bin: "{{ lookup('env', 'HOME') }}/Work/bin/guardian-git-enroll"
     guardian_gate_station_public_key_path: /etc/guardian/station_ed25519.pub
@@ -43,6 +44,22 @@
       guardian_station_id: "{{ station_config.guardian_station_id | default(station_id) }}"
       guardian_relay_url: "{{ station_config.guardian_relay_url | default('') }}"
   tasks:
+    - name: Povolit SSH na home-laptop bez UFW limitu
+      community.general.ufw:
+        rule: allow
+        port: "22"
+        proto: tcp
+        comment: ssh-fail2ban
+      when: home_laptop_ssh_firewall_enabled | bool
+
+    - name: Odebrat Omarchy UFW limit SSH na home-laptop
+      community.general.ufw:
+        rule: limit
+        port: "22"
+        proto: tcp
+        delete: true
+      when: home_laptop_ssh_firewall_enabled | bool
+
     - name: Načíst veřejný klíč stanice pro Git Gate
       ansible.builtin.slurp:
         src: "{{ guardian_gate_station_public_key_path }}"
