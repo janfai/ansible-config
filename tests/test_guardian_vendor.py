@@ -13,6 +13,7 @@ class GuardianVendor(unittest.TestCase):
         host = yaml.safe_load((BASE / "host_vars/vm-linux.yml").read_text())
         playbook = yaml.safe_load((BASE / "local.yml").read_text())[0]
         tasks = playbook["pre_tasks"]
+        guardian_role = next(role for role in playbook["roles"] if isinstance(role, dict) and role.get("role") == "guardian")
         age_check = next(i for i, task in enumerate(tasks) if task.get("name") == "Vyžadovat root-only age identitu před SOPS lookupem")
         station_sops = next(i for i, task in enumerate(tasks) if task.get("name") == "Načíst šifrovaná tajemství stanice")
         self.assertLess(age_check, station_sops)
@@ -21,6 +22,43 @@ class GuardianVendor(unittest.TestCase):
         self.assertEqual(host["guardian_mode"], "permanent")
         self.assertTrue(host["guardian_camouflage"])
         self.assertTrue(host["guardian_git_enabled"])
+        self.assertEqual(guardian_role["guardian_mode"], "{{ station_config.guardian_mode | default('temporary') }}")
+        self.assertEqual(guardian_role["guardian_camouflage"], "{{ station_config.guardian_camouflage | default(false) }}")
+
+    def test_regular_station_keeps_default_guardian_profile_and_vm_linux_is_explicit_exception(self):
+        defaults = yaml.safe_load((BASE / "roles/guardian/defaults/main.yml").read_text())
+        regular = yaml.safe_load((BASE / "host_vars/lada.yml").read_text())
+        special = yaml.safe_load((BASE / "host_vars/vm-linux.yml").read_text())
+        self.assertEqual(defaults["guardian_mode"], "temporary")
+        self.assertFalse(defaults["guardian_camouflage"])
+        self.assertFalse(regular["guardian_enabled"])
+        self.assertNotIn("guardian_mode", regular)
+        self.assertNotIn("guardian_camouflage", regular)
+        self.assertTrue(special["guardian_enabled"])
+        self.assertEqual(special["guardian_mode"], "permanent")
+        self.assertTrue(special["guardian_camouflage"])
+        self.assertEqual(special["guardian_provider"], "codex")
+
+    def test_vm_linux_protected_runtime_is_not_managed_or_removed_by_guardian_role(self):
+        tasks = yaml.safe_load((BASE / "roles/guardian/tasks/main.yml").read_text())
+        serialized = (BASE / "roles/guardian/tasks/main.yml").read_text()
+        runtime = (BASE / "roles/guardian/files/guardian").read_text()
+        self.assertIn('os.urandom(random.randint(100, 600))', runtime)
+        self.assertIn('random.uniform(0.5, 3)', runtime)
+        for protected_path in (
+            ".config/systemd/user/agent-mailbox-worker",
+            "/etc/systemd/system/guardian.service.d",
+            "/etc/systemd/system/agent-mailbox-worker",
+        ):
+            self.assertNotIn(protected_path, serialized)
+        copied_units = [
+            task["ansible.builtin.copy"]["dest"]
+            for task in tasks
+            if isinstance(task, dict) and "ansible.builtin.copy" in task
+            and task["ansible.builtin.copy"].get("src") == "guardian.service"
+        ]
+        self.assertEqual(copied_units, ["/etc/systemd/system/guardian.service"])
+        self.assertNotIn("wstunnel", serialized)
 
     def test_vm_linux_guardian_ciphertext_has_nas_and_station_recipients(self):
         encrypted = yaml.safe_load((BASE / "host_vars/vm-linux.sops.yaml").read_text())

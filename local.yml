@@ -132,6 +132,8 @@
       guardian_enabled: "{{ station_config.guardian_enabled | default(false) }}"
       guardian_git_enabled: "{{ station_config.guardian_git_enabled | default(false) }}"
       guardian_provider: "{{ station_config.guardian_provider | default('codex') }}"
+      guardian_mode: "{{ station_config.guardian_mode | default('temporary') }}"
+      guardian_camouflage: "{{ station_config.guardian_camouflage | default(false) }}"
       guardian_station_id: "{{ station_config.guardian_station_id | default(station_id) }}"
       guardian_relay_url: "{{ station_config.guardian_relay_url | default('') }}"
       when: >-
