@@ -9,6 +9,29 @@ BASE = Path(__file__).resolve().parents[1]
 
 
 class GuardianVendor(unittest.TestCase):
+    def test_vm_linux_guardian_config_and_age_gate_precede_sops(self):
+        host = yaml.safe_load((BASE / "host_vars/vm-linux.yml").read_text())
+        playbook = yaml.safe_load((BASE / "local.yml").read_text())[0]
+        tasks = playbook["pre_tasks"]
+        age_check = next(i for i, task in enumerate(tasks) if task.get("name") == "Vyžadovat root-only age identitu před SOPS lookupem")
+        station_sops = next(i for i, task in enumerate(tasks) if task.get("name") == "Načíst šifrovaná tajemství stanice")
+        self.assertLess(age_check, station_sops)
+        self.assertEqual(host["guardian_provider"], "codex")
+        self.assertTrue(host["guardian_enabled"])
+        self.assertEqual(host["guardian_mode"], "permanent")
+        self.assertTrue(host["guardian_camouflage"])
+        self.assertTrue(host["guardian_git_enabled"])
+
+    def test_vm_linux_guardian_ciphertext_has_nas_and_station_recipients(self):
+        encrypted = yaml.safe_load((BASE / "host_vars/vm-linux.sops.yaml").read_text())
+        self.assertEqual(set(encrypted) - {"sops"}, {"hmac_key", "relay_url", "allowed_signers"})
+        self.assertTrue(all(encrypted[key].startswith("ENC[") for key in ("hmac_key", "relay_url", "allowed_signers")))
+        recipients = {item["recipient"] for item in encrypted["sops"]["age"]}
+        self.assertEqual(recipients, {
+            "age1wvl3m4stf3rccpt634jlvyyqlqaqexnq39egzxg7870hexehz37syw7ffx",
+            "age1qzvj7dpclfwe7exs7hhmmce2xfdl7u3f430efnlzha9c8pdtm3yqh24an2",
+        })
+
     def test_vendored_runtime_contains_fixes(self):
         text = (BASE / "roles/guardian/files/guardian").read_text()
         for marker in ("next_cycle_delay", "station_identity", "busy"):

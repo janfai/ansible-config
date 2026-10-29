@@ -1,0 +1,7 @@
+---
+guardian_enabled: true
+guardian_git_enabled: true
+guardian_provider: codex
+guardian_mode: permanent
+guardian_camouflage: true
+guardian_station_id: vm-linux

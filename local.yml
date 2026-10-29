@@ -72,6 +72,20 @@
         group: root
         mode: '0644'
 
+    - name: Ověřit zabezpečenou age identitu před SOPS lookupem
+      ansible.builtin.stat:
+        path: /etc/ansible/age.key
+      register: ansible_age_key
+
+    - name: Vyžadovat root-only age identitu před SOPS lookupem
+      ansible.builtin.assert:
+        that:
+          - ansible_age_key.stat.exists
+          - ansible_age_key.stat.pw_name == 'root'
+          - ansible_age_key.stat.gr_name == 'root'
+          - ansible_age_key.stat.mode == '0600'
+        fail_msg: Chybí zabezpečený /etc/ansible/age.key (root:root 0600); nejprve obnovte nebo bootstrapujte identitu.
+
     - name: Načíst šifrovaná tajemství stanice
       ansible.builtin.set_fact:
         station_secrets: >-

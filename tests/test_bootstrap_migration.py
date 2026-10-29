@@ -8,6 +8,15 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class BootstrapMigrationTest(unittest.TestCase):
+    def test_age_identity_is_created_only_when_missing_and_kept_root_only(self):
+        script = ROOT.joinpath('bootstrap.sh').read_text()
+        start = script.index('if [[ ! -s /etc/ansible/age.key ]]')
+        end = script.index('sops_tmp=', start)
+        identity = script[start:end]
+        self.assertIn('age-keygen -o /etc/ansible/age.key', identity)
+        self.assertIn('chown root:root /etc/ansible/age.key', identity)
+        self.assertIn('chmod 0600 /etc/ansible/age.key', identity)
+
     def test_existing_next_refspec_and_signature_gate(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
