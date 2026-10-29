@@ -39,7 +39,7 @@ def clean(name, value):
 def collect():
     specs = {
         'inxi': ['inxi', '-Fz'],
-        'dmidecode': ['sudo', '-n', 'dmidecode', '--type', 'bios,baseboard,system'],
+        'dmidecode': ['sudo', '-n', 'dmidecode', '--type', 'bios', '--type', 'baseboard', '--type', 'system'],
         'lscpu': ['lscpu'],
         'lsblk': ['lsblk', '-e7', '-o', 'NAME,TYPE,SIZE,FSTYPE,MOUNTPOINTS,MODEL'],
         'lspci': ['lspci', '-nn'],
