@@ -1,0 +1,15 @@
+{
+  "name": "ansible-config",
+  "kind": "resource",
+  "host": "home-laptop",
+  "session": "01a188ad-fbb7-7e32-bdbe-13384147c030",
+  "heartbeat": "2026-10-29T17:30:10Z",
+  "ttl_min": 30,
+  "owner": {
+    "host": "home-laptop",
+    "session": "01a188ad-fbb7-7e32-bdbe-13384147c030",
+    "heartbeat": "2026-10-29T17:30:10Z",
+    "ttl_min": 30
+  },
+  "resource": "ansible-config"
+}
