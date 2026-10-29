@@ -1,4 +1,5 @@
 import json
+import grp
 import os
 import stat
 import sys
@@ -55,6 +56,8 @@ def main():
             stream.write(secret)
             stream.flush()
             os.fsync(stream.fileno())
+            os.fchmod(stream.fileno(), 0o600)
+            os.fchown(stream.fileno(), 0, grp.getgrnam("guardian-relay").gr_gid)
         key_changed = True
     if configured_path is None:
         config["station_key_files"][station_id.name] = str(key_path)

@@ -6,4 +6,9 @@ all:
       ansible_port: 10022
       ansible_become: true
       ansible_become_flags: -n
-      ansible_ssh_common_args: -o StrictHostKeyChecking=yes
+      ansible_ssh_common_args: >-
+        -o IdentityAgent=/run/user/1000/ssh-agent.socket
+        -o IdentityFile=/home/jan/.ssh/id_ed25519_hetzner
+        -o IdentitiesOnly=yes
+        -o UserKnownHostsFile=/home/jan/.ssh/known_hosts
+        -o StrictHostKeyChecking=yes
