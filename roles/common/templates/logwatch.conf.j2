@@ -1,0 +1,14 @@
+# Konfigurace Logwatch spravovaná systémem Ansible
+# Umístění v /etc/logwatch/conf/logwatch.conf přepisuje výchozí hodnoty v /usr/share/logwatch/default.conf/
+LogDir = /var/log
+TmpDir = /var/cache/logwatch
+Output = mail
+Format = text
+Encode = none
+MailTo = root
+MailFrom = Logwatch
+Range = yesterday
+Detail = Low
+Service = All
+Service = "-eximstats"
+mailer = "/usr/sbin/sendmail -t"

@@ -4,6 +4,9 @@ station_base_conflicting_time_packages:
   - chrony
   - ntpsec
 station_base_absent_packages: []
+station_base_obsolete_packages:
+  - ddclient
+  - linuxcounter
 station_base_sysv_links_glob: '[SK][0-9][0-9]ntp'
 station_base_sysv_rc_dirs:
   - /etc/rc0.d

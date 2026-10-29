@@ -112,6 +112,12 @@
     enabled: true
     state: started
 
+- name: Zajistit pravidelný týdenní TRIM SSD disků
+  ansible.builtin.systemd:
+    name: fstrim.timer
+    enabled: true
+    state: started
+
 - name: Nainstalovat základní balíčky navíc proti čistému Mintu
   ansible.builtin.apt:
     name: "{{ mint_base_packages }}"
@@ -217,3 +223,28 @@
       - Timeshift není nainstalovaný nebo nemá dostupné snímky.
   changed_when: false
   when: "'timeshift' not in ansible_facts.packages or timeshift_check.rc != 0 or 'No snapshots found' in timeshift_check.stdout"
+
+- name: Zajistit adresář pro cache logwatch
+  ansible.builtin.file:
+    path: /var/cache/logwatch
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Zajistit adresář lokální konfigurace logwatch
+  ansible.builtin.file:
+    path: /etc/logwatch/conf
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Nastavit lokální konfiguraci logwatch
+  ansible.builtin.template:
+    src: logwatch.conf.j2
+    dest: /etc/logwatch/conf/logwatch.conf
+    owner: root
+    group: root
+    mode: '0644'
+

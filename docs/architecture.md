@@ -8,7 +8,7 @@ První clone i systemd služba používají stejné `GIT_SSH_COMMAND` s deploy k
 
 ## Proměnné a tajemství
 
-`local.yml` načte `group_vars/mint.yml`, `host_vars/<id>.yml` a pomocí `community.sops.sops` rozšifruje `secrets/<id>.enc.yaml`. Povolená ID jsou `lada`, `milan`, `jitka`, `lucie`, `vlada`, `alan` a `vm-mint` (testovací stanice `mint_test`). Veřejné age klíče stanic se po bootstrapu doplňují mezi příjemce v `.sops.yaml`; veřejné Git klíče se předávají správci VPS a registrují přes `fleet-enroll <id> <pubkey-file>`.
+`local.yml` načte `group_vars/mint.yml`, `host_vars/<id>.yml` a pomocí `community.sops.sops` rozšifruje `secrets/<id>.enc.yaml`. Povolená ID jsou `lada`, `milan`, `jitka`, `lucie`, `vlada` a `vm-mint` (testovací stanice `mint_test`). Veřejné age klíče stanic se po bootstrapu doplňují mezi příjemce v `.sops.yaml`; veřejné Git klíče se předávají správci VPS a registrují přes `fleet-enroll <id> <pubkey-file>`.
 
 SOPS tajemství obsahují adresu relay serveru, heslo SMTP účtu a adresu uživatele. Konfigurační soubory, dokumentace i názvy stanic v Gitu používají pouze pseudonymy. Tajemství se nikdy nevypisují do protokolu Ansible.
 

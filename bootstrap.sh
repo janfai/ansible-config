@@ -17,8 +17,8 @@ else
 fi
 repository="${ANSIBLE_CONFIG_REPOSITORY:-ssh://fleet-config@vps.faix.cz:10022/srv/fleet-config/ansible-config.git}"
 case "${station_id}" in
-    lada|milan|jitka|lucie|vlada|alan|vm-mint) ;;
-    *) printf '%s\n' 'Použití: bootstrap.sh {lada|milan|jitka|lucie|vlada|alan|vm-mint} [větev] SHA256:otisk' >&2; exit 2 ;;
+    lada|milan|jitka|lucie|vlada|vm-mint) ;;
+    *) printf '%s\n' 'Použití: bootstrap.sh {lada|milan|jitka|lucie|vlada|vm-mint} [větev] SHA256:otisk' >&2; exit 2 ;;
 esac
 if [[ ! "${host_fingerprint}" =~ ^SHA256:[A-Za-z0-9+/]{43}$ ]]; then
     printf '%s\n' 'Předejte ověřený fingerprint host key jako třetí parametr (SHA256:...).' >&2

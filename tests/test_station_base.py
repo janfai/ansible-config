@@ -59,6 +59,14 @@ class StationBase(unittest.TestCase):
         installs = [t for t in self.tasks if t.get("ansible.builtin.apt", {}).get("state") == "present"]
         self.assertEqual([t["ansible.builtin.apt"]["name"] for t in installs], ["systemd-timesyncd"])
 
+    def test_obsolete_packages_purged_by_default(self):
+        self.assertIn("ddclient", self.defaults["station_base_obsolete_packages"])
+        self.assertIn("linuxcounter", self.defaults["station_base_obsolete_packages"])
+        purge = next(t for t in self.tasks if t.get("name") == "Odstranit zastaralé a nežádoucí balíčky")
+        self.assertTrue(purge["ansible.builtin.apt"]["purge"])
+        self.assertEqual(purge["ansible.builtin.apt"]["state"], "absent")
+
+
     def test_optional_removal_is_guarded_and_default_is_empty(self):
         self.assertEqual(self.defaults["station_base_absent_packages"], [])
         safety = next(t for t in self.tasks if t.get("name") == "Prověřit bezpečné odstranění volitelných balíčků")

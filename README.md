@@ -16,7 +16,7 @@ sudo bash ./bootstrap.sh lada main SHA256:<ověřený-fingerprint>
 
 První parametr je pevné ID stanice. Větev se zadává jako druhý parametr a při vynechání se použije `main`; fingerprint `SHA256:...` je povinný poslední parametr (při výchozí větvi tedy druhý). Bootstrap stáhne host key na portu 10022, ověří fingerprint a zapíše jej do `/etc/ansible/known_hosts`; SSH vyžaduje striktní kontrolu host key. Po nasazení větev určuje `ansible_pull_branch` v `host_vars/<id>.yml`, výchozí je `main`. URL lze přepsat proměnnou `ANSIBLE_CONFIG_REPOSITORY`, jejíž výchozí hodnota je `ssh://fleet-config@vps.faix.cz:10022/srv/fleet-config/ansible-config.git`.
 
-Použitelná ID jsou `lada`, `milan`, `jitka`, `lucie`, `vlada`, `alan` a `vm-mint` (testovací stanice `mint_test`). Skript nainstaluje potřebné balíčky, připne SOPS ke konkrétní verzi a kontrolnímu součtu, vytvoří klíč age a bez hesla deploy SSH klíč `/etc/ansible/git_ed25519` s režimem `0600`; zapne časovač. Na konci vypíše age i SSH veřejný klíč.
+Použitelná ID jsou `lada`, `milan`, `jitka`, `lucie`, `vlada` a `vm-mint` (testovací stanice `mint_test`). Skript nainstaluje potřebné balíčky, připne SOPS ke konkrétní verzi a kontrolnímu součtu, vytvoří klíč age a bez hesla deploy SSH klíč `/etc/ansible/git_ed25519` s režimem `0600`; zapne časovač. Na konci vypíše age i SSH veřejný klíč.
 
 ## Přidání stanice
 

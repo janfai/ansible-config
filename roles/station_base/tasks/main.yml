@@ -59,6 +59,13 @@
     state: absent
   loop: "{{ station_base_orphan_links.stdout_lines }}"
 
+- name: Odstranit zastaralé a nežádoucí balíčky
+  ansible.builtin.apt:
+    name: "{{ station_base_obsolete_packages }}"
+    state: absent
+    purge: true
+
+
 - name: Zjistit nebalíčková stará pravidla udev
   ansible.builtin.stat:
     path: "{{ item }}"
