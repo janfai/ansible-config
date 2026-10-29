@@ -14,6 +14,7 @@ SOPS tajemství obsahují adresu relay serveru, heslo SMTP účtu a adresu uživ
 
 ## Role
 
+- `base_tools`: **Janův standardní seznam CLI nástrojů pro všechny stanice a servery** (mc, htop, btop, atop, iotop, iftop, iptraf-ng, nmap, vim, ncdu, smartmontools, needrestart…, proměnná `base_tools_packages`, per-stanice rozšíření `base_tools_extra_packages`, vypnutí `base_tools_enabled: false`). Než sem přidávat další standardní/běžné nástroje jinou cestou, zkontroluj tuto roli a `~/Work/memory/preferences/standard-cli-tools.md` (zdroj a odůvodnění seznamu) — ať nevznikne duplicitní/konfliktní role se stejným účelem.
 - `common`: užitečné balíčky, české prostředí, bezpečnostní aktualizace bez automatického restartu, kontrola místa v `/boot` a dostupnosti Timeshiftu.
 - `sops_client`: instalace připnutého SOPS s ověřeným SHA-256.
 - `mail`: Postfix pouze pro odchozí poštu přes ověřený šifrovaný přenos; systémové adresy přepisuje na přihlašovací účet stanice.
