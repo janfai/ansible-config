@@ -3,12 +3,12 @@
   "kind": "resource",
   "host": "home-laptop",
   "session": "worker-home-laptop-codex-1793298583305552420",
-  "heartbeat": "2026-10-29T18:31:15Z",
+  "heartbeat": "2026-10-29T18:32:51Z",
   "ttl_min": 30,
   "owner": {
     "host": "home-laptop",
     "session": "worker-home-laptop-codex-1793298583305552420",
-    "heartbeat": "2026-10-29T18:31:15Z",
+    "heartbeat": "2026-10-29T18:32:51Z",
     "ttl_min": 30
   },
   "resource": "ansible-staging"
