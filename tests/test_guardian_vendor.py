@@ -80,8 +80,10 @@ class GuardianVendor(unittest.TestCase):
     def test_none_provider_is_default_and_skips_agent_setup(self):
         defaults = (BASE / "roles/guardian/defaults/main.yml").read_text()
         tasks = (BASE / "roles/guardian/tasks/main.yml").read_text()
+        validation = (BASE / "roles/guardian/tasks/validate-secrets.yml").read_text()
         self.assertIn("guardian_provider: none", defaults)
-        self.assertIn("guardian_provider in ['none', 'codex', 'claude']", tasks)
+        self.assertIn("ansible.builtin.include_tasks: validate-secrets.yml", tasks)
+        self.assertIn("guardian_provider in ['none', 'codex', 'claude']", validation)
         self.assertIn("guardian_enabled | bool and guardian_provider != 'none'", tasks)
         self.assertIn("agent_provider: \"{{ guardian_provider }}\"", tasks)
         self.assertIn("guardian_provider == 'none'", tasks)
