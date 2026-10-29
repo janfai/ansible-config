@@ -14,6 +14,7 @@ class GuardianVendor(unittest.TestCase):
         for marker in ("next_cycle_delay", "station_identity", "busy"):
             self.assertIn(marker, text, marker)
         self.assertIn('configured_provider == "none"', text)
+        self.assertNotIn("UPGRADE_GUARDIAN", text)
 
     def test_none_provider_is_default_and_skips_agent_setup(self):
         defaults = (BASE / "roles/guardian/defaults/main.yml").read_text()
@@ -27,7 +28,7 @@ class GuardianVendor(unittest.TestCase):
         self.assertIn('mode: "{{ guardian_mode }}"', tasks)
         self.assertIn("guardian.service", tasks)
 
-    def test_legacy_paths_move_before_new_paths_are_created(self):
+    def test_existing_station_paths_move_before_canonical_paths_are_created(self):
         tasks = yaml.safe_load((BASE / "roles/guardian/tasks/main.yml").read_text())
         migration = next(i for i, task in enumerate(tasks) if task.get("name") == "Přesunout staré adresáře Guardiana bez slučování kolizních dat")
         create = next(i for i, task in enumerate(tasks) if task.get("name") == "Vytvořit adresáře Guardiana")
@@ -37,10 +38,10 @@ class GuardianVendor(unittest.TestCase):
         retire = next(task for task in tasks if task.get("name") == "Odstranit soubory a profily Guardiana")
         self.assertEqual(set(retire["loop"]), {"/opt/guardian", "/etc/guardian", "/var/lib/guardian", "/opt/upgrade-guardian", "/etc/upgrade-guardian", "/var/lib/upgrade-guardian"})
 
-    def test_new_unit_and_vendor_manifest_match(self):
+    def test_canonical_unit_and_vendor_manifest_match(self):
         files = BASE / "roles/guardian/files"
         self.assertTrue((files / "guardian.service").is_file())
-        self.assertFalse((files / "upgrade-guardian.service").exists())
+        self.assertEqual({path.name for path in files.glob("*.service")}, {"guardian.service"})
         result = __import__("subprocess").run(["sha256sum", "--check", "MANIFEST"], cwd=files, text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
