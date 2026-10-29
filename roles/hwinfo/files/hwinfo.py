@@ -23,7 +23,10 @@ def clean(name, value):
     lines = []
     for line in value.splitlines():
         low = line.lower()
-        if re.search(r'\b(serial number|serial no\.?|system serial|chassis serial|base board serial|asset tag|wwn|uuid|machine id)\b', low):
+        identifier = re.search(r'\b(serial number|serial no\.?|system serial|chassis serial|base board serial|asset tag|wwn|uuid|machine id)\b', low)
+        if name == 'dmidecode' and identifier:
+            line = re.sub(r'(?i)^(\s*[^:]+:\s*).+$', r'\1<filter>', line)
+        elif identifier:
             continue
         line = re.sub(r'(?i)\b(?:[0-9a-f]{2}:){5}[0-9a-f]{2}\b', '[MAC odstraněna]', line)
         if re.search(r'\b(uptime|temperature|cpu mhz|bogomips|power_on_hours|power_on_hours_and|power_cycle_count|unsafe_shutdowns)\b', low):
@@ -36,14 +39,19 @@ def clean(name, value):
 def collect():
     specs = {
         'inxi': ['inxi', '-Fz'],
-        'dmidecode': ['dmidecode', '--type', 'bios,baseboard,system,memory,processor'],
+        'dmidecode': ['sudo', '-n', 'dmidecode', '--type', 'bios,baseboard,system'],
         'lscpu': ['lscpu'],
         'lsblk': ['lsblk', '-e7', '-o', 'NAME,TYPE,SIZE,FSTYPE,MOUNTPOINTS,MODEL'],
         'lspci': ['lspci', '-nn'],
         'lsusb': ['lsusb'],
     }
-    if shutil.which('sudo') and run(['sudo', '-n', 'true'], timeout=10)[0] == 0 and shutil.which('smartctl'):
-        specs['smartctl'] = ['sudo', '-n', 'smartctl', '--scan-open']
+    if shutil.which('sudo') and run(['sudo', '-n', 'true'], timeout=10)[0] == 0:
+        if not shutil.which('dmidecode'):
+            specs.pop('dmidecode')
+        if shutil.which('smartctl'):
+            specs['smartctl'] = ['sudo', '-n', 'smartctl', '--scan-open']
+    else:
+        specs.pop('dmidecode')
     result = {}
     for name, args in specs.items():
         if not shutil.which(args[0]):

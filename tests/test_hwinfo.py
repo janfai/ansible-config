@@ -20,6 +20,8 @@ Model name: Example CPU
         result = hwinfo.clean("dmidecode", source)
         for secret in ("SECRET-SERIAL", "12345678-1234-1234-1234-123456789abc", "0x5000c50012345678", "aa:bb:cc:dd:ee:ff", "3200.0"):
             self.assertNotIn(secret, result)
+        self.assertIn("System Serial Number: <filter>", result)
+        self.assertIn("Base Board UUID: <filter>", result)
         self.assertIn("[MAC odstraněna]", result)
         self.assertIn("Model name: Example CPU", result)
 
