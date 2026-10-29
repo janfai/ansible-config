@@ -11,6 +11,7 @@ import yaml
 
 BASE = Path(__file__).resolve().parents[1]
 FIXTURE_CIPHERTEXT = b"SOPS-ENCRYPTED-FIXTURE-NOT-A-REAL-SECRET\n"
+FIXTURE_STATION_PUBLIC_KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFIXTUREFIXTUREFIXTUREFIXTUREFIXTUREFIXTUREFIXT"
 FIXTURE_PRIVATE_KEY = "FIXTURE-PRIVATE-KEY-NOT-A-REAL-KEY\n"
 FIXTURE_SECRETS = {
     "relay_url": "https://relay.invalid/fixture",
@@ -217,11 +218,11 @@ class GuardianHomeLaptop(unittest.TestCase):
             trace = root / "helper-calls.jsonl"
             fake_helper.write_text("\n".join([
                 "#!/usr/bin/env python3",
-                "import json, sys",
+                "import json, os, sys",
                 "from pathlib import Path",
                 "trace = Path(" + repr(str(trace)) + ")",
                 "calls = trace.read_text().splitlines() if trace.exists() else []",
-                "with trace.open('a') as stream: stream.write(json.dumps(sys.argv[1:]) + '\\n')",
+                "with trace.open('a') as stream: stream.write(json.dumps({'args': sys.argv[1:], 'sock': os.environ.get('SSH_AUTH_SOCK'), 'uid': os.getuid()}) + '\\n')",
                 "print(json.dumps({'added_keys': 1 if not calls else 0}))",
             ]) + "\n")
             fake_helper.chmod(0o755)
@@ -229,7 +230,10 @@ class GuardianHomeLaptop(unittest.TestCase):
             self.assertEqual(disabled.returncode, 0, disabled.stdout + disabled.stderr)
             self.assertFalse(trace.exists())
 
+            station_key = root / "station_ed25519.pub"
+            station_key.write_text(FIXTURE_STATION_PUBLIC_KEY + "\n")
             extra = {
+                "guardian_gate_station_public_key_path": str(station_key),
                 "guardian_gate_enrollment_enabled": True,
                 "guardian_gate_enroll_bin": str(fake_helper),
                 "guardian_gate_master_public_key": str(root / "master.pub"),
@@ -241,12 +245,30 @@ class GuardianHomeLaptop(unittest.TestCase):
             self.assertIn("changed=0", second.stdout)
             calls = [json.loads(line) for line in trace.read_text().splitlines()]
             self.assertEqual(len(calls), 2)
-            for args in calls:
+            for call in calls:
+                args = call["args"]
                 self.assertEqual(args[args.index("--id") + 1], "home-laptop")
-                self.assertEqual(args[args.index("--station") + 1], "jan@home-laptop")
+                self.assertNotIn("--station", args)
+                self.assertEqual(args[args.index("--station-public-key") + 1], FIXTURE_STATION_PUBLIC_KEY)
                 self.assertEqual(args[args.index("--master-name") + 1], "home-laptop")
+                self.assertEqual(args[args.index("--admin") + 1], "jan@vps")
+                self.assertEqual(args[args.index("--port") + 1], "10022")
                 self.assertEqual(args[args.index("--ssh-option") + 1], "StrictHostKeyChecking=yes")
                 self.assertNotIn("--dry-run", args)
+                self.assertEqual(call["sock"], "/run/user/1000/ssh-agent.socket")
+                self.assertEqual(call["uid"], os.getuid())
+            self.assertNotIn(FIXTURE_STATION_PUBLIC_KEY, first.stdout + first.stderr)
+
+    def test_gate_enrollment_defaults_pin_vps_alias_and_local_key_path(self):
+        play_vars = yaml.safe_load((BASE / "guardian-home-laptop.yml").read_text())[0]["vars"]
+        self.assertEqual(play_vars["guardian_gate_admin"], "jan@vps")
+        self.assertEqual(play_vars["guardian_gate_admin_port"], 10022)
+        self.assertEqual(play_vars["guardian_gate_station_public_key_path"], "/etc/guardian/station_ed25519.pub")
+        tasks = yaml.safe_load((BASE / "guardian-home-laptop.yml").read_text())[0]["tasks"]
+        slurp = next(task for task in tasks if "ansible.builtin.slurp" in task)
+        self.assertTrue(slurp["become"])
+        enroll = next(task for task in tasks if "ansible.builtin.command" in task)
+        self.assertIs(enroll["become"], False)
 
 
 if __name__ == "__main__":

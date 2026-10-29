@@ -8,6 +8,10 @@
     station_id: home-laptop
     guardian_gate_enrollment_enabled: false
     guardian_gate_enroll_bin: "{{ lookup('env', 'HOME') }}/Work/bin/guardian-git-enroll"
+    guardian_gate_station_public_key_path: /etc/guardian/station_ed25519.pub
+    guardian_gate_admin: jan@vps
+    guardian_gate_admin_port: 10022
+    guardian_gate_ssh_auth_sock: /run/user/1000/ssh-agent.socket
     guardian_gate_master_public_key: "{{ lookup('env', 'HOME') }}/.ssh/id_ed25519.pub"
   pre_tasks:
     - name: Odmítnout přepsání identity home-laptop
@@ -39,20 +43,35 @@
       guardian_station_id: "{{ station_config.guardian_station_id | default(station_id) }}"
       guardian_relay_url: "{{ station_config.guardian_relay_url | default('') }}"
   tasks:
+    - name: Načíst veřejný klíč stanice pro Git Gate
+      ansible.builtin.slurp:
+        src: "{{ guardian_gate_station_public_key_path }}"
+      register: guardian_gate_station_public_key
+      become: true
+      no_log: true
+      when: guardian_gate_enrollment_enabled | bool
+
     - name: Idempotentně zaregistrovat Git Gate po úspěšném nasazení stanice
       ansible.builtin.command:
         argv:
           - "{{ guardian_gate_enroll_bin }}"
           - --id
           - "{{ station_config.guardian_station_id | default(station_id) }}"
-          - --station
-          - "{{ station_config.guardian_ssh_target }}"
+          - --station-public-key
+          - "{{ guardian_gate_station_public_key.content | b64decode | trim }}"
           - --master-key
           - "{{ guardian_gate_master_public_key }}"
           - --master-name
           - home-laptop
+          - --admin
+          - "{{ guardian_gate_admin }}"
+          - --port
+          - "{{ guardian_gate_admin_port }}"
           - --ssh-option
           - StrictHostKeyChecking=yes
+      become: false
+      environment:
+        SSH_AUTH_SOCK: "{{ guardian_gate_ssh_auth_sock }}"
       register: guardian_gate_enroll_result
       changed_when: (guardian_gate_enroll_result.stdout | from_json).added_keys | int > 0
       when: guardian_gate_enrollment_enabled | bool
