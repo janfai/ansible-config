@@ -1,0 +1,81 @@
+- name: Zaregistrovat home-laptop na Guardian relay
+  hosts: vps
+  gather_facts: false
+  vars:
+    relay_station_id: home-laptop
+    relay_config_path: /etc/guardian/relay.json
+    relay_station_key_path: /etc/guardian/stations/home-laptop.key
+    relay_secrets: "{{ lookup('guardian_sops_remote', playbook_dir ~ '/host_vars/home-laptop.sops.yaml') | from_yaml }}"
+  tasks:
+    - name: Zajistit adresář pomocných nástrojů Relay
+      ansible.builtin.file:
+        path: /opt/guardian/ansible
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Instalovat bezpečný updater konfigurace Relay
+      ansible.builtin.copy:
+        src: roles/guardian_relay_enrollment/files/relay-enroll.py
+        dest: /opt/guardian/ansible/relay-enroll.py
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Ověřit, že SOPS obsahuje klíč pro Relay
+      ansible.builtin.assert:
+        that:
+          - relay_secrets.hmac_key is defined
+          - relay_secrets.hmac_key | string | trim | length > 0
+        fail_msg: Šifrovaný profil home-laptop neobsahuje klíč Guardian relay.
+      no_log: true
+
+    - name: Zajistit chybějící klíč stanice bez přepsání existujícího souboru
+      ansible.builtin.copy:
+        content: "{{ relay_secrets.hmac_key | trim }}\n"
+        dest: "{{ relay_station_key_path }}"
+        owner: guardian-relay
+        group: guardian-relay
+        mode: '0600'
+        force: false
+      register: relay_key_install
+      no_log: true
+      notify: Restartovat Guardian relay
+
+    - name: Ověřit oprávnění existujícího klíče stanice
+      ansible.builtin.stat:
+        path: "{{ relay_station_key_path }}"
+      register: relay_station_key_stat
+      no_log: true
+
+    - name: Odmítnout klíč stanice s chybným vlastníkem nebo oprávněními
+      ansible.builtin.assert:
+        that:
+          - relay_station_key_stat.stat.pw_name == 'guardian-relay'
+          - relay_station_key_stat.stat.gr_name == 'guardian-relay'
+          - relay_station_key_stat.stat.mode == '0600'
+        fail_msg: Existující klíč Relay nemá očekávaného vlastníka nebo režim.
+      no_log: true
+
+    - name: Zaregistrovat ID stanice bez přepsání existujícího klíče nebo konfigurace
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/python3
+          - /opt/guardian/ansible/relay-enroll.py
+          - "{{ relay_config_path }}"
+          - "{{ relay_station_id }}"
+          - "{{ relay_station_key_path }}"
+        stdin: "{{ relay_secrets.hmac_key | trim }}\n"
+        stdin_add_newline: false
+      register: relay_config_update
+      changed_when: relay_config_update.stdout == 'changed'
+      failed_when: relay_config_update.rc != 0
+      no_log: true
+      notify: Restartovat Guardian relay
+
+  handlers:
+    - name: Restartovat Guardian relay
+      ansible.builtin.systemd:
+        name: guardian-relay.service
+        state: restarted

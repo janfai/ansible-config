@@ -1,0 +1,9 @@
+all:
+  hosts:
+    vps:
+      ansible_host: vps
+      ansible_user: jan
+      ansible_port: 10022
+      ansible_become: true
+      ansible_become_flags: -n
+      ansible_ssh_common_args: -o StrictHostKeyChecking=yes
