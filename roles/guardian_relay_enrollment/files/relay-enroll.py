@@ -52,12 +52,16 @@ def main():
             fd = os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         except FileExistsError:
             fail("station key appeared during enrollment")
-        with os.fdopen(fd, "wb") as stream:
-            stream.write(secret)
-            stream.flush()
-            os.fsync(stream.fileno())
-            os.fchmod(stream.fileno(), 0o600)
-            os.fchown(stream.fileno(), 0, grp.getgrnam("guardian-relay").gr_gid)
+        try:
+            with os.fdopen(fd, "wb") as stream:
+                os.fchmod(stream.fileno(), 0o600)
+                os.fchown(stream.fileno(), 0, grp.getgrnam("guardian-relay").gr_gid)
+                stream.write(secret)
+                stream.flush()
+                os.fsync(stream.fileno())
+        except Exception:
+            key_path.unlink(missing_ok=True)
+            raise
         key_changed = True
     if configured_path is None:
         config["station_key_files"][station_id.name] = str(key_path)
