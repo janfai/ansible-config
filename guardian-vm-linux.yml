@@ -1,0 +1,64 @@
+---
+- name: Správa Guardiana na vm-linux
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: true
+  vars_files:
+    - group_vars/mint.yml
+  vars:
+    station_id: "{{ station_id_content.content | b64decode | trim }}"
+  pre_tasks:
+    - name: Zjistit přítomnost identity stanice
+      ansible.builtin.stat:
+        path: /etc/ansible/station-id
+      register: station_id_file
+
+    - name: Ověřit existenci identity stanice
+      ansible.builtin.assert:
+        that:
+          - station_id_file.stat.exists
+        fail_msg: Chybí /etc/ansible/station-id; nejprve spusťte bootstrap.sh <id>.
+
+    - name: Načíst identitu stanice
+      ansible.builtin.slurp:
+        src: /etc/ansible/station-id
+      register: station_id_content
+
+    - name: Ověřit cílový systém a identitu vm-linux
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == 'Linux Mint'
+          - station_id == 'vm-linux'
+        fail_msg: Tento vstupní bod je určen pouze pro vm-linux s Linux Mint.
+
+    - name: Načíst profil vm-linux
+      ansible.builtin.include_vars:
+        file: host_vars/vm-linux.yml
+        name: station_config
+
+    - name: Vyžadovat bezpečnou age identitu
+      ansible.builtin.stat:
+        path: /etc/ansible/age.key
+      register: ansible_age_key
+
+    - name: Ověřit root-only age identitu
+      ansible.builtin.assert:
+        that:
+          - ansible_age_key.stat.exists
+          - ansible_age_key.stat.pw_name == 'root'
+          - ansible_age_key.stat.gr_name == 'root'
+          - ansible_age_key.stat.mode == '0600'
+          - station_config.guardian_enabled | bool
+          - station_config.guardian_mode == 'permanent'
+          - station_config.guardian_camouflage | bool
+        fail_msg: Chybí bezpečná age identita nebo očekávaný profil Guardiana vm-linux.
+  roles:
+    - role: guardian
+      guardian_enabled: "{{ station_config.guardian_enabled | default(false) }}"
+      guardian_git_enabled: "{{ station_config.guardian_git_enabled | default(false) }}"
+      guardian_provider: "{{ station_config.guardian_provider | default('codex') }}"
+      guardian_mode: "{{ station_config.guardian_mode | default('temporary') }}"
+      guardian_camouflage: "{{ station_config.guardian_camouflage | default(false) }}"
+      guardian_station_id: "{{ station_config.guardian_station_id | default(station_id) }}"
+      guardian_relay_url: "{{ station_config.guardian_relay_url | default('') }}"

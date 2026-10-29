@@ -38,6 +38,8 @@ Codex se instaluje pouze pro provider `codex` z archivu oficiálního vydání O
 
 `host_vars/vm-linux.yml` výslovně nastavuje trvalý Guardian s camouflage a Codex providerem. `local.yml` předává `guardian_mode` a `guardian_camouflage` z host konfigurace; běžné stanice zůstávají na výchozím `temporary` a `false`. Test `test_regular_station_keeps_default_guardian_profile_and_vm_linux_is_explicit_exception` tuto hranici hlídá.
 
+Pro samostatné zprovoznění nebo opravu Guardianu na vm-linux použijte `ansible-playbook guardian-vm-linux.yml`. Tento vstup ověřuje lokální identitu, Linux Mint, profil vm-linux a chráněnou age identitu, potom spustí pouze roli `guardian`; načítá její vlastní tajemství z `host_vars/vm-linux.sops.yaml`. Nevyžaduje obecný poštovní soubor `secrets/vm-linux.enc.yaml` a nespouští role `mail` ani `reporting`. Běžný `local.yml` zůstává beze změny a dál vyžaduje všechna obecná tajemství stanice.
+
 Padding Guardiana, lokální jitter časovačů workeru a VPN gate jsou provozní invarianty vm-linux. Role je nepřenáší do fleet defaults, nespravuje jejich drop-iny a nemaže je při správě Guardian služby. Jejich změna vyžaduje samostatné výslovné rozhodnutí; Ansible změny samy o sobě nejsou nasazením na vm-linux.
 
 ## Kompatibilita a ověření E2E
