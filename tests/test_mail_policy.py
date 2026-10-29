@@ -62,6 +62,15 @@ class MailPolicy(unittest.TestCase):
         self.assertIn("settings.get('mail_enabled', True)", handler)
         self.assertIn('raise SystemExit(0)', handler)
 
+    def test_generic_template_includes_wildcard_mapping(self):
+        template = (BASE / 'roles/mail/templates/generic.j2').read_text()
+        rendered = Environment(undefined=StrictUndefined).from_string(template).render(
+            station_id='lada',
+            station_secrets={'SMTP_RELAY_HOST': 'vps.faix.cz'}
+        )
+        self.assertIn('@lada.stanice.invalid lada@vps.faix.cz', rendered.splitlines())
+        self.assertIn('root@lada.stanice.invalid lada@vps.faix.cz', rendered.splitlines())
+
 
 if __name__ == '__main__':
     unittest.main()
