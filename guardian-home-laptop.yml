@@ -6,6 +6,9 @@
   gather_facts: true
   vars:
     station_id: home-laptop
+    guardian_gate_enrollment_enabled: false
+    guardian_gate_enroll_bin: "{{ lookup('env', 'HOME') }}/Work/bin/guardian-git-enroll"
+    guardian_gate_master_public_key: "{{ lookup('env', 'HOME') }}/.ssh/id_ed25519.pub"
   pre_tasks:
     - name: Ověřit cílový Omarchy host
       ansible.builtin.assert:
@@ -28,3 +31,21 @@
       guardian_camouflage: "{{ station_config.guardian_camouflage | default(false) | bool }}"
       guardian_station_id: "{{ station_config.guardian_station_id | default(station_id) }}"
       guardian_relay_url: "{{ station_config.guardian_relay_url | default('') }}"
+  tasks:
+    - name: Idempotentně zaregistrovat Git Gate po úspěšném nasazení stanice
+      ansible.builtin.command:
+        argv:
+          - "{{ guardian_gate_enroll_bin }}"
+          - --id
+          - "{{ station_config.guardian_station_id | default(station_id) }}"
+          - --station
+          - "{{ station_config.guardian_ssh_target }}"
+          - --master-key
+          - "{{ guardian_gate_master_public_key }}"
+          - --master-name
+          - home-laptop
+          - --ssh-option
+          - StrictHostKeyChecking=yes
+      register: guardian_gate_enroll_result
+      changed_when: (guardian_gate_enroll_result.stdout | from_json).added_keys | int > 0
+      when: guardian_gate_enrollment_enabled | bool
