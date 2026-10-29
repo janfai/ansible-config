@@ -1,0 +1,15 @@
+{
+  "name": "ansible-staging",
+  "kind": "resource",
+  "host": "home-laptop",
+  "session": "worker-home-laptop-codex-1793294464476870924",
+  "heartbeat": "2026-10-29T17:21:56Z",
+  "ttl_min": 30,
+  "owner": {
+    "host": "home-laptop",
+    "session": "worker-home-laptop-codex-1793294464476870924",
+    "heartbeat": "2026-10-29T17:21:56Z",
+    "ttl_min": 30
+  },
+  "resource": "ansible-staging"
+}
