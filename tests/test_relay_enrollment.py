@@ -123,6 +123,46 @@ class RelayEnrollment(unittest.TestCase):
         self.assertEqual(vm_key.read_bytes(), vm_key_before)
         self.assertFalse(self.key.exists())
 
+    def test_skips_missing_mapped_station_key_file(self):
+        missing = self.root / "stations/missing.key"
+        self.initial["station_key_files"]["offline-station"] = str(missing)
+        self.config.write_text(json.dumps(self.initial) + "\n")
+        result = self.run_updater()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.key.read_bytes(), FIXTURE_KEY)
+
+    def test_rejects_symlink_and_fifo_mapped_key_paths(self):
+        target = self.root / "outside.key"
+        target.write_bytes(b"different-fixture-key\n")
+        symlink = self.root / "stations/symlink.key"
+        symlink.symlink_to(target)
+        fifo = self.root / "stations/fifo.key"
+        os.mkfifo(fifo)
+        for mapped_path in (symlink, fifo):
+            with self.subTest(mapped_path=mapped_path.name):
+                self.initial["station_key_files"]["unsafe-station"] = str(mapped_path)
+                self.config.write_text(json.dumps(self.initial) + "\n")
+                result = self.run_updater()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(self.key.exists())
+
+    def test_normalizes_trailing_newlines_for_existing_key_equality(self):
+        self.key.parent.mkdir(parents=True, exist_ok=True)
+        self.key.write_bytes(FIXTURE_KEY.rstrip(b"\n") + b"\r\n\n")
+        result = self.run_updater()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, b"changed\n")
+        self.assertEqual(self.key.read_bytes(), FIXTURE_KEY.rstrip(b"\n") + b"\r\n\n")
+
+    def test_normalizes_trailing_newlines_for_uniqueness_check(self):
+        Path(self.initial["station_key_files"]["vm-linux"]).write_bytes(FIXTURE_KEY.rstrip(b"\n") + b"\r\n")
+        config_before = self.config.read_bytes()
+        result = self.run_updater()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(b"station key uniqueness check failed", result.stderr)
+        self.assertEqual(self.config.read_bytes(), config_before)
+        self.assertFalse(self.key.exists())
+
     def test_refuses_missing_key_input_without_secret_output(self):
         result = self.run_updater(payload=b"")
         self.assertNotEqual(result.returncode, 0)
@@ -193,7 +233,7 @@ class RelayEnrollment(unittest.TestCase):
 
         def execute(command, in_data=None, sudoable=True):
             observed.update(command=command, in_data=in_data, sudoable=sudoable)
-            return SimpleNamespace(rc=1, stdout="", stderr=FIXTURE_KEY.decode())
+            return {"rc": 1, "stdout": "", "stderr": FIXTURE_KEY.decode()}
 
         action._low_level_execute_command = execute
         with patch.object(ActionBase, "run", return_value={}):
@@ -204,6 +244,39 @@ class RelayEnrollment(unittest.TestCase):
         self.assertTrue(result["failed"])
         self.assertNotIn(FIXTURE_KEY.decode().strip(), result["msg"])
         self.assertNotIn(FIXTURE_KEY.decode().strip(), str(result))
+
+    def test_action_plugin_accepts_dict_success_response(self):
+        from unittest.mock import patch
+        from ansible.plugins.action import ActionBase
+
+        spec = importlib.util.spec_from_file_location("relay_enroll_secret_success_test", BASE / "plugins/action/relay_enroll_secret.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        action = module.ActionModule.__new__(module.ActionModule)
+        action._task = SimpleNamespace(args={"secret": "fixture-only", "updater": "/updater", "config_path": "/config", "station_id": "station", "key_path": "/key"})
+        action._low_level_execute_command = lambda *args, **kwargs: {"rc": 0, "stdout": "changed\n", "stderr": ""}
+        with patch.object(ActionBase, "run", return_value={}):
+            result = action.run()
+        self.assertEqual(result, {"changed": True})
+
+    def test_action_plugin_skips_check_mode_without_remote_execution(self):
+        from unittest.mock import patch
+        from ansible.plugins.action import ActionBase
+
+        spec = importlib.util.spec_from_file_location("relay_enroll_secret_check_mode_test", BASE / "plugins/action/relay_enroll_secret.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        action = module.ActionModule.__new__(module.ActionModule)
+        action._task = SimpleNamespace(args={})
+        action._play_context = SimpleNamespace(check_mode=True)
+        executed = []
+        action._low_level_execute_command = lambda *args, **kwargs: executed.append((args, kwargs))
+        with patch.object(ActionBase, "run", return_value={}):
+            result = action.run()
+        self.assertTrue(result["skipped"])
+        self.assertFalse(result["changed"])
+        self.assertEqual(executed, [])
+        self.assertFalse(module.ActionModule._supports_check_mode)
 
 
 if __name__ == "__main__":

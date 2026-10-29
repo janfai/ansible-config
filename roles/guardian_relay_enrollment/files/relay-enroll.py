@@ -12,6 +12,26 @@ def fail(message):
     raise SystemExit(1)
 
 
+def read_key_file(path):
+    try:
+        path_stat = path.lstat()
+    except FileNotFoundError:
+        return None
+    if not stat.S_ISREG(path_stat.st_mode):
+        raise ValueError("mapped key path is not a regular file")
+    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
+    fd = os.open(path, flags)
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise ValueError("mapped key path is not a regular file")
+        with os.fdopen(fd, "rb") as stream:
+            fd = -1
+            return stream.read()
+    finally:
+        if fd >= 0:
+            os.close(fd)
+
+
 def main():
     if len(sys.argv) != 4:
         fail("expected config path, station id, and key path")
@@ -31,20 +51,25 @@ def main():
     key_map = config.get("station_key_files")
     if not isinstance(key_map, dict):
         fail("relay station_key_files map is missing")
+    incoming_key = secret.rstrip(b"\r\n")
     configured_path = key_map.get(station_id.name)
     if configured_path is not None and configured_path != str(key_path):
         fail("station id is already mapped to a different key path")
     try:
         for mapped_station, mapped_path in key_map.items():
-            existing_key = Path(mapped_path).read_bytes()
-            if existing_key == secret and not (mapped_station == station_id.name and mapped_path == str(key_path)):
+            if not isinstance(mapped_path, str) or not isinstance(mapped_station, str):
+                raise ValueError("invalid mapped station key entry")
+            existing_key = read_key_file(Path(mapped_path))
+            if existing_key is not None and existing_key.rstrip(b"\r\n") == incoming_key and not (mapped_station == station_id.name and mapped_path == str(key_path)):
                 fail("station key uniqueness check failed")
     except Exception:
         fail("station key uniqueness check failed")
-    if key_path.exists():
-        if key_path.is_symlink() or not key_path.is_file():
-            fail("station key path is not a regular file")
-        if key_path.read_bytes() != secret:
+    try:
+        existing_key = read_key_file(key_path)
+    except (OSError, ValueError):
+        fail("station key path is not a regular file")
+    if existing_key is not None:
+        if existing_key.rstrip(b"\r\n") != incoming_key:
             fail("existing station key differs from encrypted input")
     else:
         key_path.parent.mkdir(parents=True, exist_ok=True)
