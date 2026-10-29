@@ -1,3 +1,4 @@
+hwinfo_enabled: true
 inventory_enabled: true
 guardian_enabled: false
 guardian_git_enabled: true

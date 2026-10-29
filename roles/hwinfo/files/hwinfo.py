@@ -23,8 +23,9 @@ def clean(name, value):
     lines = []
     for line in value.splitlines():
         low = line.lower()
-        if re.search(r'\b(serial number|serial no\.?|system serial|chassis serial|base board serial|asset tag|wwn)\b', low):
+        if re.search(r'\b(serial number|serial no\.?|system serial|chassis serial|base board serial|asset tag|wwn|uuid|machine id)\b', low):
             continue
+        line = re.sub(r'(?i)\b(?:[0-9a-f]{2}:){5}[0-9a-f]{2}\b', '[MAC odstraněna]', line)
         if re.search(r'\b(uptime|temperature|cpu mhz|bogomips|power_on_hours|power_on_hours_and|power_cycle_count|unsafe_shutdowns)\b', low):
             continue
         if name == 'inxi' and re.search(r'\b(temp|battery|health|uptime)\b', low):
