@@ -8,3 +8,4 @@ guardian_station_id: vm-mint
 guardian_task_type: upgrade
 guardian_scope: system
 guardian_mode: temporary
+hwinfo_enabled: true
