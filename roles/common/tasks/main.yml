@@ -248,36 +248,18 @@
     group: root
     mode: '0644'
 
-- name: Nainstalovat rkhunter
+- name: Odinstalovat a purge konfiguraci rkhunter
   ansible.builtin.apt:
     name: rkhunter
-    state: present
-  when: rkhunter_enabled | default(true)
+    state: absent
+    purge: true
 
-- name: Nastavit lokální konfiguraci rkhunter (jen při pozitivním nálezu, žádný denní status)
-  ansible.builtin.template:
-    src: rkhunter-default.j2
-    dest: /etc/default/rkhunter
-    owner: root
-    group: root
-    mode: '0644'
-  when: rkhunter_enabled | default(true)
-  register: rkhunter_default_changed
-
-- name: Zajistit denní cron běh rkhunter (Debian/Ubuntu balíček ho instaluje, ale neaktivuje bez CRON_DAILY_RUN)
+- name: Odstranit případné zbytky konfigurace a cron úlohy rkhunter
   ansible.builtin.file:
-    path: /etc/cron.daily/rkhunter
-    mode: '0755'
-  when: rkhunter_enabled | default(true)
-
-- name: Aktualizovat databázi vlastností rkhunter (baseline proti falešným poplachům po instalaci/upgradu)
-  ansible.builtin.command:
-    argv:
-      - rkhunter
-      - --propupd
-  when:
-    - rkhunter_enabled | default(true)
-    - rkhunter_default_changed.changed
-  changed_when: true
-  failed_when: false
-
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/default/rkhunter
+    - /etc/cron.daily/rkhunter
+    - /var/lib/rkhunter
+    - /var/log/rkhunter
