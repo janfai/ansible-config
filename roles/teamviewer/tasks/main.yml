@@ -18,10 +18,10 @@
     - teamviewer_repository.changed
     - not ansible_check_mode
 
-- name: Aktualizovat TeamViewer na nejnovější verzi z repozitáře
+- name: Nainstalovat TeamViewer, pokud chybí
   ansible.builtin.apt:
     name: teamviewer
-    state: latest
+    state: present
     update_cache: true
     cache_valid_time: 3600
   when:

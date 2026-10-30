@@ -1,9 +1,17 @@
 ---
 extends: default
 rules:
+  comments:
+    min-spaces-from-content: 1
+  comments-indentation: false
+  braces:
+    max-spaces-inside: 1
   line-length:
     max: 140
     level: warning
   document-start: enable
   truthy:
     allowed-values: ['true', 'false']
+  octal-values:
+    forbid-implicit-octal: true
+    forbid-explicit-octal: true

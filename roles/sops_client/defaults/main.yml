@@ -1,3 +1,3 @@
 ---
-sops_version: 3.13.3
-sops_sha256_amd64: e5bec3346a873ae91d871550f3e698c1aad962aff462a080e40f25fde17fef6b
+sops_client_version: 3.13.3
+sops_client_sha256_amd64: e5bec3346a873ae91d871550f3e698c1aad962aff462a080e40f25fde17fef6b

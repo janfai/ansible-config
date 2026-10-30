@@ -9,7 +9,7 @@
     - question: postfix/main_mailer_type
       value: Satellite system
     - question: postfix/mailname
-      value: "{{ postfix_mailname }}"
+      value: "{{ mail_postfix_mailname }}"
 
 - name: Nainstalovat Postfix a kořenové certifikáty
   ansible.builtin.apt:
@@ -33,12 +33,12 @@
 - name: Zjistit čas změny přihlašovacích údajů
   ansible.builtin.stat:
     path: /etc/postfix/sasl_passwd
-  register: postfix_sasl_source
+  register: mail_postfix_sasl_source
 
 - name: Zjistit stav mapy přihlašovacích údajů
   ansible.builtin.stat:
     path: /etc/postfix/sasl_passwd.db
-  register: postfix_sasl_map
+  register: mail_postfix_sasl_map
 
 - name: Založit mapu přihlašovacích údajů
   ansible.builtin.command:
@@ -46,7 +46,7 @@
       - postmap
       - /etc/postfix/sasl_passwd
   changed_when: true
-  when: not postfix_sasl_map.stat.exists or postfix_sasl_map.stat.mtime < postfix_sasl_source.stat.mtime
+  when: not mail_postfix_sasl_map.stat.exists or mail_postfix_sasl_map.stat.mtime < mail_postfix_sasl_source.stat.mtime
   notify:
     - Zkontrolovat konfiguraci Postfixu
     - Restartovat Postfix
@@ -100,12 +100,12 @@
 - name: Zjistit čas změny převodu odchozích adres
   ansible.builtin.stat:
     path: /etc/postfix/generic
-  register: postfix_generic_source
+  register: mail_postfix_generic_source
 
 - name: Zjistit stav mapy převodu odchozích adres
   ansible.builtin.stat:
     path: /etc/postfix/generic.db
-  register: postfix_generic_map
+  register: mail_postfix_generic_map
 
 - name: Vytvořit mapu převodu odchozích adres
   ansible.builtin.command:
@@ -113,7 +113,7 @@
       - postmap
       - /etc/postfix/generic
   changed_when: true
-  when: not postfix_generic_map.stat.exists or postfix_generic_map.stat.mtime < postfix_generic_source.stat.mtime
+  when: not mail_postfix_generic_map.stat.exists or mail_postfix_generic_map.stat.mtime < mail_postfix_generic_source.stat.mtime
   notify:
     - Zkontrolovat konfiguraci Postfixu
     - Restartovat Postfix
@@ -128,7 +128,7 @@
 - name: Zapsat název stanice pro poštu
   ansible.builtin.copy:
     dest: /etc/mailname
-    content: "{{ postfix_mailname }}\n"
+    content: "{{ mail_postfix_mailname }}\n"
     owner: root
     group: root
     mode: '0644'

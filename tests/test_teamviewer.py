@@ -21,7 +21,7 @@ class TeamViewer(unittest.TestCase):
         self.assertIn("not ansible_check_mode", cache_task["when"])
         package_task = next(t for t in tasks if t.get("ansible.builtin.apt", {}).get("name") == "teamviewer")
         package = package_task["ansible.builtin.apt"]
-        self.assertEqual(package, {"name": "teamviewer", "state": "latest", "update_cache": True, "cache_valid_time": 3600})
+        self.assertEqual(package, {"name": "teamviewer", "state": "present", "update_cache": True, "cache_valid_time": 3600})
         self.assertIn("not ansible_check_mode", package_task["when"])
         unattended = next(t["ansible.builtin.copy"] for t in tasks if t.get("ansible.builtin.copy", {}).get("dest", "").endswith("52teamviewer-unattended-upgrades"))
         self.assertIn('origin=TeamViewer GmbH,label=TeamViewer', unattended["content"])

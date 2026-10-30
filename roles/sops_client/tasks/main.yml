@@ -2,21 +2,21 @@
 - name: Ověřit přítomnost age klíče stanice
   ansible.builtin.stat:
     path: /etc/ansible/age.key
-  register: age_key
+  register: sops_client_age_key
 
 - name: Vyžadovat age klíč stanice
   ansible.builtin.assert:
     that:
-      - age_key.stat.exists
-      - age_key.stat.mode == '0600'
-      - age_key.stat.pw_name == 'root'
+      - sops_client_age_key.stat.exists
+      - sops_client_age_key.stat.mode == '0600'
+      - sops_client_age_key.stat.pw_name == 'root'
     fail_msg: Chybí zabezpečený age klíč vytvořený při zavedení stanice.
 
 - name: Nainstalovat připnutý SOPS
   ansible.builtin.get_url:
-    url: "https://github.com/getsops/sops/releases/download/v{{ sops_version }}/sops-v{{ sops_version }}.linux.amd64"
+    url: "https://github.com/getsops/sops/releases/download/v{{ sops_client_version }}/sops-v{{ sops_client_version }}.linux.amd64"
     dest: /usr/local/bin/sops
-    checksum: "sha256:{{ sops_sha256_amd64 }}"
+    checksum: "sha256:{{ sops_client_sha256_amd64 }}"
     owner: root
     group: root
     mode: '0755'

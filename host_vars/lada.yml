@@ -1,3 +1,4 @@
+---
 hwinfo_enabled: true
 hwinfo_sudo_user: faix
 inventory_enabled: true

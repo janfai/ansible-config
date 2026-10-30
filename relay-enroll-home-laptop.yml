@@ -1,3 +1,4 @@
+---
 - name: Zaregistrovat home-laptop na Guardian relay
   hosts: vps
   gather_facts: false

@@ -1,1 +1,1 @@
-[{{ station_secrets.SMTP_RELAY_HOST }}]:{{ postfix_smtp_port }} {{ station_secrets.SMTP_ACCOUNT }}:{{ station_secrets['SMTP_PASS_' ~ (station_id | upper | replace('-', '_'))] }}
+[{{ station_secrets.SMTP_RELAY_HOST }}]:{{ mail_postfix_smtp_port }} {{ station_secrets.SMTP_ACCOUNT }}:{{ station_secrets['SMTP_PASS_' ~ (station_id | upper | replace('-', '_'))] }}

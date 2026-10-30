@@ -5,7 +5,7 @@
       - awk
       - 'NR > 1 && substr($1, 1, 5) == "/dev/" { print $1 }'
       - /proc/swaps
-  register: resume_swap_devices
+  register: common_resume_swap_devices
   changed_when: false
   check_mode: false
 
@@ -18,16 +18,16 @@
       - -o
       - value
       - "{{ item }}"
-  loop: "{{ resume_swap_devices.stdout_lines }}"
-  register: resume_swap_uuid_results
+  loop: "{{ common_resume_swap_devices.stdout_lines }}"
+  register: common_resume_swap_uuid_results
   changed_when: false
   failed_when: false
   check_mode: false
 
 - name: Collect active swap UUIDs
   ansible.builtin.set_fact:
-    resume_active_swap_uuids: >-
-      {{ resume_swap_uuid_results.results
+    common_resume_active_swap_uuids: >-
+      {{ common_resume_swap_uuid_results.results
          | selectattr('rc', 'equalto', 0)
          | map(attribute='stdout')
          | reject('equalto', '')
@@ -38,36 +38,36 @@
 - name: Check for an existing initramfs resume configuration
   ansible.builtin.stat:
     path: /etc/initramfs-tools/conf.d/resume
-  register: resume_configuration
+  register: common_resume_configuration
 
 - name: Read the current initramfs resume configuration
   ansible.builtin.slurp:
     src: /etc/initramfs-tools/conf.d/resume
-  register: resume_configuration_content
-  when: resume_configuration.stat.exists
+  register: common_resume_configuration_content
+  when: common_resume_configuration.stat.exists
 
 - name: Parse configured resume UUIDs and setting presence
   ansible.builtin.set_fact:
-    resume_configured_uuids: >-
-      {{ (resume_configuration_content.content | b64decode | regex_findall('(?m)^RESUME=UUID=([A-Fa-f0-9-]+)')) }}
-    resume_setting_present: >-
-      {{ (resume_configuration_content.content | b64decode | regex_findall('(?m)^RESUME=')) | length > 0 }}
+    common_resume_configured_uuids: >-
+      {{ (common_resume_configuration_content.content | b64decode | regex_findall('(?m)^RESUME=UUID=([A-Fa-f0-9-]+)')) }}
+    common_resume_setting_present: >-
+      {{ (common_resume_configuration_content.content | b64decode | regex_findall('(?m)^RESUME=')) | length > 0 }}
   changed_when: false
-  when: resume_configuration.stat.exists
+  when: common_resume_configuration.stat.exists
 
 - name: Replace stale initramfs resume UUID with an active swap UUID
   ansible.builtin.lineinfile:
     path: /etc/initramfs-tools/conf.d/resume
     regexp: '^RESUME='
-    line: "RESUME=UUID={{ resume_active_swap_uuids | first }}"
+    line: "RESUME=UUID={{ common_resume_active_swap_uuids | first }}"
     owner: root
     group: root
     mode: '0644'
   when:
-    - resume_configuration.stat.exists
-    - resume_setting_present
-    - resume_active_swap_uuids | length > 0
-    - resume_configured_uuids | intersect(resume_active_swap_uuids) | length == 0
+    - common_resume_configuration.stat.exists
+    - common_resume_setting_present
+    - common_resume_active_swap_uuids | length > 0
+    - common_resume_configured_uuids | intersect(common_resume_active_swap_uuids) | length == 0
   notify: Regenerate initramfs after resume config change
 
 - name: Remove initramfs resume configuration without an active swap UUID
@@ -75,9 +75,9 @@
     path: /etc/initramfs-tools/conf.d/resume
     state: absent
   when:
-    - resume_configuration.stat.exists
-    - resume_setting_present
-    - resume_active_swap_uuids | length == 0
+    - common_resume_configuration.stat.exists
+    - common_resume_setting_present
+    - common_resume_active_swap_uuids | length == 0
   notify: Regenerate initramfs after resume config change
 
 - name: Instalovat ověřovací wrapper ansible-pull
@@ -150,7 +150,7 @@
       - show
       - --property=Timezone
       - --value
-  register: timezone_current
+  register: common_timezone_current
   changed_when: false
 
 - name: Nastavit časové pásmo
@@ -159,7 +159,8 @@
       - timedatectl
       - set-timezone
       - "{{ mint_timezone }}"
-  when: timezone_current.stdout != mint_timezone
+  changed_when: true
+  when: common_timezone_current.stdout != mint_timezone
 
 - name: Zjistit základní vydání Ubuntu této stanice
   ansible.builtin.command:
@@ -168,7 +169,7 @@
       - -F=
       - '$1 == "UBUNTU_CODENAME" {gsub(/"/, "", $2); print $2}'
       - /etc/os-release
-  register: ubuntu_codename
+  register: common_ubuntu_codename
   changed_when: false
 
 - name: Omezit automatické aktualizace na bezpečnostní opravy
@@ -207,7 +208,7 @@
     argv:
       - timeshift
       - --list
-  register: timeshift_check
+  register: common_timeshift_check
   failed_when: false
   changed_when: false
   when: "'timeshift' in ansible_facts.packages"
@@ -222,7 +223,10 @@
       - ansible-common
       - Timeshift není nainstalovaný nebo nemá dostupné snímky.
   changed_when: false
-  when: "'timeshift' not in ansible_facts.packages or timeshift_check.rc != 0 or 'No snapshots found' in timeshift_check.stdout"
+  when: >-
+    'timeshift' not in ansible_facts.packages or
+    common_timeshift_check.rc != 0 or
+    'No snapshots found' in common_timeshift_check.stdout
 
 - name: Zajistit adresář pro cache logwatch
   ansible.builtin.file:
